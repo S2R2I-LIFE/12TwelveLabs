@@ -1,0 +1,31 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+python-multipart==0.0.9
+pysrt==1.1.2
+pydub==0.25.1
+phonemizer==3.3.0
+tqdm==4.66.4
+boto3==1.34.0
+aiofiles==23.2.1
+sse-starlette==2.1.0
+pyyaml==6.0.1
+requests==2.32.3
+# faster-whisper for transcription (built-in Silero VAD, no pyannote dependency)
+huggingface-hub>=0.28.1
+faster-whisper>=1.0.0,<2.0.0
+# Pin below 4.51.0: that version added a torch.load safety check requiring PyTorch>=2.6
+# Our base image uses PyTorch 2.4.1 (cuda12.1) so we must stay on 4.50.x
+transformers>=4.40.0,<4.51.0
+ctranslate2>=3.0.0
+pandas>=1.4.0
+nltk>=3.8.0
+# Training dependencies (accelerate launch + StyleTTS2 imports)
+cython>=3.0.0
+accelerate>=0.27.0
+librosa>=0.10.0
+munch>=2.5.0
+tensorboard>=2.14.0
+einops>=0.7.0
+einops_exts>=0.0.4
+soundfile>=0.12.0
+matplotlib>=3.7.0

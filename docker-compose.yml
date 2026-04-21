@@ -1,0 +1,123 @@
+services:
+  styletts2-api:
+    image: styletts2-api:latest
+    ports:
+      - '8100:8000'
+    restart: unless-stopped
+    environment:
+      - AWS_REGION=us-east-1
+      - S3_BUCKET=b-gpt-elevenlabs-clone
+      - S3_PREFIX=styletts2-output
+      - API_KEY=${BACKEND_API_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - WORKSPACE=/workspace
+    volumes:
+      - finetune_workspace:/workspace
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  seedvc-api:
+    image: seedvc-api:latest
+    ports:
+      - '8101:8000'
+    restart: unless-stopped
+    environment:
+      - AWS_REGION=us-east-1
+      - S3_BUCKET=b-gpt-elevenlabs-clone
+      - S3_PREFIX=seedvc-outputs
+      - API_KEY=${BACKEND_API_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  make-an-audio-api:
+    image: make-an-audio-api:latest
+    ports:
+      - '8102:8000'
+    restart: unless-stopped
+    environment:
+      - AWS_REGION=us-east-1
+      - S3_BUCKET=b-gpt-elevenlabs-clone
+      - S3_PREFIX=make-an-audio-outputs
+      - API_KEY=${BACKEND_API_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  finetune-api:
+    build:
+      context: ./finetune-api
+      dockerfile: Dockerfile
+    ports:
+      - '8103:8000'
+    restart: unless-stopped
+    environment:
+      - API_KEY=${BACKEND_API_KEY}
+      - WORKSPACE=/workspace
+      - STYLETTS2_PATH=/StyleTTS2
+      - FINETUNE_SCRIPTS_PATH=/FineTune
+      - STYLETTS2_API_URL=http://styletts2-api:8000
+      - DB_PATH=/prisma-data/db.sqlite
+    volumes:
+      - finetune_workspace:/workspace
+      - ./StyleTTS2:/StyleTTS2:ro
+      - ./StyleTTS2FineTune:/FineTune:ro
+      - ./elevenlabs-clone-frontend/prisma:/prisma-data
+    depends_on:
+      - styletts2-api
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  inngest:
+    image: inngest/inngest
+    ports:
+      - '8288:8288'
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: inngest dev -u http://host.docker.internal:3001/api/inngest
+
+  jupyterlab:
+    image: jupyter/scipy-notebook:latest
+    ports:
+      - '8104:8888'
+    restart: unless-stopped
+    environment:
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+      - JUPYTER_ENABLE_LAB=yes
+    volumes:
+      - finetune_workspace:/workspace
+    command: >
+      start-notebook.sh
+      --NotebookApp.token=${JUPYTER_TOKEN}
+      --NotebookApp.base_url=/jupyter
+      --NotebookApp.allow_origin=*
+      --NotebookApp.disable_check_xsrf=True
+      --ServerApp.root_dir=/workspace
+
+volumes:
+  finetune_workspace:
+    driver: local
