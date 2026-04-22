@@ -23,10 +23,8 @@ import toast from "react-hot-toast";
 
 export function TextToSpeechEditor({
   service,
-  credits,
 }: {
   service: ServiceType;
-  credits: number;
 }) {
   const [textContent, setTextContent] = useState("");
   const [activePlaceholder, setActivePlaceholder] = useState(
@@ -151,7 +149,7 @@ export function TextToSpeechEditor({
         onChange={(e) => setTextContent(e.target.value)}
         placeholder={activePlaceholder}
         disabled={loading}
-        className="w-full flex-grow resize-none rounded-lg bg-white p-4 placeholder:font-light placeholder:text-gray-500 focus:border-none focus:outline-none focus:ring-0"
+        className="w-full flex-grow resize-none rounded-lg bg-white p-4 placeholder:font-light placeholder:text-gray-500 focus:border-none focus:outline-none focus:ring-0 dark:bg-gray-900 dark:text-gray-200 dark:placeholder-gray-600"
       />
 
       <div className="mt-4 px-0 md:px-4">
@@ -190,7 +188,7 @@ export function TextToSpeechEditor({
               ].map(({ text, icon }) => (
                 <button
                   key={text}
-                  className="flex items-center rounded-lg border border-gray-200 bg-white p-2 text-xs hover:bg-gray-50"
+                  className="flex items-center rounded-lg border border-gray-200 bg-white p-2 text-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                   onMouseEnter={() => handleButtonHover(text)}
                   onMouseLeave={() =>
                     setActivePlaceholder(
@@ -215,8 +213,6 @@ export function TextToSpeechEditor({
             }
             isLoading={loading}
             showDownload={true}
-            creditsRemaining={credits}
-            showCredits={true}
             characterCount={textContent.length}
             characterLimit={5000}
           />

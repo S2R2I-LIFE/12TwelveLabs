@@ -162,12 +162,14 @@ export function TrainWizard({
   } | null>(null);
 
   // Step 7
-  // Consider training_done as "deployed" too so handleNewVoice doesn't wipe a completed training run
-  const [deployed, setDeployed] = useState(
-    initialJob?.status === "ready" || initialJob?.status === "training_done",
-  );
+  // deployed = voice is live in styletts2-api (status "ready" or after clicking Activate)
+  const [deployed, setDeployed] = useState(initialJob?.status === "ready");
   const [deployedVoiceId, setDeployedVoiceId] = useState<string | null>(
     initialJob?.status === "ready" ? initialJob.voiceModelId : null,
+  );
+  // trainingFinished = training ran to completion (safe to not delete even if not yet activated)
+  const [trainingFinished, setTrainingFinished] = useState(
+    initialJob?.status === "ready" || initialJob?.status === "training_done",
   );
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
@@ -393,7 +395,7 @@ export function TrainWizard({
     esRef.current?.close();
     try {
       // Delete in-progress jobs to free workspace; leave trained/deployed jobs intact
-      if (job && !deployed) {
+      if (job && !deployed && !trainingFinished) {
         await fetch(`/api/voice-lab/jobs/${job.jobId}`, { method: "DELETE" });
       }
     } catch (e) {
@@ -416,17 +418,43 @@ export function TrainWizard({
     setDeployed(false);
     setDeployedVoiceId(null);
     setDeployError(null);
+    setTrainingFinished(false);
     setResetting(false);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full gap-6">
+    <div className="flex h-full flex-col gap-4 md:flex-row md:gap-6">
       {/* Left stepper */}
-      <div className="w-52 flex-shrink-0">
-        <h2 className="mb-4 font-semibold text-gray-900">Train Voice</h2>
-        <ol className="space-y-1">
+      <div className="md:w-52 md:flex-shrink-0">
+        <h2 className="mb-3 font-semibold text-gray-900 dark:text-white md:mb-4">Train Voice</h2>
+
+        {/* Mobile: compact horizontal step dots */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 md:hidden">
+          {STEP_LABELS.map((label, idx) => {
+            const n = idx + 1;
+            const done = n < step;
+            const active = n === step;
+            return (
+              <div key={n} className="flex flex-shrink-0 flex-col items-center gap-1">
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${active ? "bg-gray-900 text-white" : done ? "bg-green-500 text-white" : "bg-gray-200 text-gray-400"}`}
+                >
+                  {done ? <IoCheckmarkCircle className="h-4 w-4" /> : n}
+                </div>
+                {active && (
+                  <span className="max-w-[56px] text-center text-[10px] leading-tight text-gray-700">
+                    {label}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop: vertical step list */}
+        <ol className="hidden space-y-1 md:block">
           {STEP_LABELS.map((label, idx) => {
             const n = idx + 1;
             const done = n < step;
@@ -434,7 +462,7 @@ export function TrainWizard({
             return (
               <li
                 key={n}
-                className={`flex cursor-default items-center gap-2 rounded-lg px-3 py-2 text-sm ${active ? "bg-gray-100 font-medium text-gray-900" : done ? "text-gray-500" : "text-gray-400"}`}
+                className={`flex cursor-default items-center gap-2 rounded-lg px-3 py-2 text-sm ${active ? "bg-gray-100 font-medium text-gray-900 dark:bg-gray-700 dark:text-white" : done ? "text-gray-500 dark:text-gray-400" : "text-gray-400 dark:text-gray-600"}`}
               >
                 {done ? (
                   <IoCheckmarkCircle className="h-4 w-4 text-green-500" />
@@ -453,7 +481,7 @@ export function TrainWizard({
           <button
             onClick={handleNewVoice}
             disabled={resetting}
-            className="mt-5 flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+            className="mt-3 flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 md:mt-5"
           >
             <IoAddOutline className="h-3.5 w-3.5" />
             {resetting ? "Resetting…" : "New voice"}
@@ -462,7 +490,7 @@ export function TrainWizard({
       </div>
 
       {/* Right content */}
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         {step === 1 && (
           <StepNameVoice
             voiceName={voiceName}
@@ -537,7 +565,7 @@ export function TrainWizard({
             stepError={stepError}
             epochProgress={epochProgress}
             onRun={() => runStep("train", epochs)}
-            onNext={() => setStep(7)}
+            onNext={() => { setTrainingFinished(true); setStep(7); }}
             logsEndRef={logsEndRef}
           />
         )}
@@ -585,7 +613,7 @@ function StepNameVoice({
   return (
     <div className="max-w-md space-y-5">
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">
+        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
           Voice name
         </label>
         <input
@@ -593,18 +621,18 @@ function StepNameVoice({
           value={voiceName}
           onChange={(e) => setVoiceName(e.target.value)}
           placeholder="My Voice"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-gray-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-500"
         />
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">
+        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
           Language
         </label>
         <select
           value={language}
           onChange={(e) => setLanguage(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-400 focus:outline-none"
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-gray-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-500"
         >
           {LANGUAGES.map((l) => (
             <option key={l.value} value={l.value}>
@@ -615,7 +643,7 @@ function StepNameVoice({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">
+        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
           Training epochs: {epochs}
         </label>
         <input
@@ -627,14 +655,14 @@ function StepNameVoice({
           onChange={(e) => setEpochs(Number(e.target.value))}
           className="w-full"
         />
-        <div className="mt-1 flex justify-between text-xs text-gray-400">
+        <div className="mt-1 flex justify-between text-xs text-gray-400 dark:text-gray-500">
           <span>50</span>
           <span>350</span>
         </div>
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">
+        <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
           Batch size
         </label>
         <div className="flex gap-3">
@@ -642,13 +670,13 @@ function StepNameVoice({
             <button
               key={n}
               onClick={() => setBatchSize(n)}
-              className={`rounded-lg border px-4 py-2 text-sm ${batchSize === n ? "border-gray-800 bg-gray-800 text-white" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+              className={`rounded-lg border px-4 py-2 text-sm ${batchSize === n ? "border-gray-800 bg-gray-800 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"}`}
             >
               {n}
             </button>
           ))}
         </div>
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
           Use 1 if you run out of GPU memory.
         </p>
       </div>
@@ -656,7 +684,7 @@ function StepNameVoice({
       <button
         onClick={onCreate}
         disabled={!voiceName.trim() || creating}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
       >
         {creating ? "Creating…" : "Create job"}
         {!creating && <IoChevronForward />}
@@ -727,7 +755,7 @@ function MicRecorder({ onRecorded }: { onRecorded: (f: File) => void }) {
       {recState === "idle" && (
         <button
           onClick={startRecording}
-          className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
         >
           <IoMicOutline className="h-4 w-4" />
           Record from microphone
@@ -741,7 +769,7 @@ function MicRecorder({ onRecorded }: { onRecorded: (f: File) => void }) {
           </span>
           <button
             onClick={stopRecording}
-            className="flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+            className="flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
           >
             <IoStopCircleOutline className="h-4 w-4" />
             Stop
@@ -749,7 +777,7 @@ function MicRecorder({ onRecorded }: { onRecorded: (f: File) => void }) {
         </>
       )}
       {recState === "processing" && (
-        <span className="flex items-center gap-2 text-sm text-gray-500">
+        <span className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <IoRefreshOutline className="h-4 w-4 animate-spin" />
           Encoding WAV…
         </span>
@@ -779,14 +807,14 @@ function StepUpload({
 
   return (
     <div className="max-w-lg space-y-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Upload WAV files for training. At least 5 minutes of clean speech is
         recommended.
       </p>
 
       {/* Drop zone */}
       <div
-        className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 px-6 py-10 hover:border-gray-400"
+        className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 px-6 py-10 hover:border-gray-400 dark:border-gray-600 dark:hover:border-gray-500"
         onClick={() => fileInputRef.current?.click()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
@@ -794,8 +822,8 @@ function StepUpload({
           onSelect(e.dataTransfer.files);
         }}
       >
-        <IoCloudUploadOutline className="mb-2 h-8 w-8 text-gray-400" />
-        <p className="text-sm text-gray-500">
+        <IoCloudUploadOutline className="mb-2 h-8 w-8 text-gray-400 dark:text-gray-500" />
+        <p className="text-sm text-gray-500 dark:text-gray-400">
           Click or drag WAV files here
         </p>
         <input
@@ -810,9 +838,9 @@ function StepUpload({
 
       {/* Divider */}
       <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-gray-200" />
-        <span className="text-xs text-gray-400">or</span>
-        <div className="h-px flex-1 bg-gray-200" />
+        <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+        <span className="text-xs text-gray-400 dark:text-gray-500">or</span>
+        <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
       </div>
 
       <MicRecorder onRecorded={onAddRecording} />
@@ -822,23 +850,23 @@ function StepUpload({
           {files.map((f) => (
             <li
               key={f.name}
-              className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2"
+              className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 dark:border-gray-700"
             >
-              <span className="truncate text-gray-700">{f.name}</span>
+              <span className="truncate text-gray-700 dark:text-gray-300">{f.name}</span>
               <div className="ml-2 flex items-center gap-3">
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-gray-400 dark:text-gray-500">
                   {(f.size / 1024 / 1024).toFixed(1)} MB
                 </span>
                 <button
                   onClick={() => onRemove(f.name)}
-                  className="text-gray-400 hover:text-red-500"
+                  className="text-gray-400 hover:text-red-500 dark:text-gray-500"
                 >
                   <IoTrashOutline />
                 </button>
               </div>
             </li>
           ))}
-          <li className="px-3 py-1 text-xs text-gray-400">
+          <li className="px-3 py-1 text-xs text-gray-400 dark:text-gray-500">
             Total: {totalMB.toFixed(1)} MB
           </li>
         </ul>
@@ -847,7 +875,7 @@ function StepUpload({
       <button
         onClick={onNext}
         disabled={files.length === 0 || uploading}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
       >
         {uploading ? "Uploading…" : "Upload & continue"}
         {!uploading && <IoChevronForward />}
@@ -864,7 +892,7 @@ function LogConsole({
   logsEndRef: React.RefObject<HTMLDivElement>;
 }) {
   return (
-    <pre className="mt-3 max-h-96 overflow-y-auto rounded-lg bg-gray-900 p-3 text-xs text-green-400">
+    <pre className="mt-3 max-h-96 overflow-y-auto rounded-lg bg-gray-900 p-3 text-xs text-green-400 dark:bg-gray-950">
       {logs.length === 0
         ? "Waiting for output…"
         : logs.join("\n")}
@@ -897,7 +925,7 @@ function StepPreprocess({
 
   return (
     <div className="max-w-lg space-y-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Run preprocessing steps in order. Silence buffer is optional.
       </p>
 
@@ -933,7 +961,7 @@ function StepPreprocess({
       {logs.length > 0 && <LogConsole logs={logs} logsEndRef={logsEndRef} />}
 
       {stepError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
           {stepError}
         </div>
       )}
@@ -941,7 +969,7 @@ function StepPreprocess({
       <button
         onClick={onNext}
         disabled={!ranSegment}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
       >
         Continue to curate <IoChevronForward />
       </button>
@@ -971,7 +999,7 @@ function StepCurate({
 
   return (
     <div className="max-w-2xl space-y-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Review segmented clips. Check the ones you want to exclude, then
         continue.
       </p>
@@ -981,20 +1009,20 @@ function StepCurate({
       ) : clips.length === 0 ? (
         <p className="text-sm text-gray-400">No clips found yet.</p>
       ) : (
-        <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-200">
+        <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-gray-50">
+            <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800">
               <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">
                   Exclude
                 </th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">
                   File
                 </th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">
                   Duration
                 </th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">
+                <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">
                   Transcription
                 </th>
               </tr>
@@ -1003,7 +1031,7 @@ function StepCurate({
               {clips.map((c) => (
                 <tr
                   key={c.filename}
-                  className={`border-t border-gray-100 ${excluded.has(c.filename) ? "bg-red-50" : ""}`}
+                  className={`border-t border-gray-100 dark:border-gray-700 ${excluded.has(c.filename) ? "bg-red-50 dark:bg-red-900/20" : ""}`}
                 >
                   <td className="px-3 py-2 text-center">
                     <input
@@ -1012,13 +1040,13 @@ function StepCurate({
                       onChange={() => toggle(c.filename)}
                     />
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-gray-700">
+                  <td className="px-3 py-2 font-mono text-xs text-gray-700 dark:text-gray-300">
                     {c.filename}
                   </td>
-                  <td className="px-3 py-2 text-gray-500">
+                  <td className="px-3 py-2 text-gray-500 dark:text-gray-400">
                     {c.duration.toFixed(1)}s
                   </td>
-                  <td className="max-w-xs truncate px-3 py-2 text-gray-700">
+                  <td className="max-w-xs truncate px-3 py-2 text-gray-700 dark:text-gray-300">
                     {c.transcription}
                   </td>
                 </tr>
@@ -1028,14 +1056,14 @@ function StepCurate({
         </div>
       )}
 
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-gray-400 dark:text-gray-500">
         {clips.length - excluded.size} / {clips.length} clips kept
       </p>
 
       <button
         onClick={onNext}
         disabled={loading}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
       >
         Save & continue <IoChevronForward />
       </button>
@@ -1062,14 +1090,14 @@ function StepPhOnemize({
 }) {
   return (
     <div className="max-w-lg space-y-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Generate IPA phonemizations and build train/val splits.
       </p>
 
       <button
         onClick={onRun}
         disabled={running || stepDone}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
       >
         {running ? (
           <>
@@ -1087,7 +1115,7 @@ function StepPhOnemize({
       {logs.length > 0 && <LogConsole logs={logs} logsEndRef={logsEndRef} />}
 
       {stepError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
           {stepError}
         </div>
       )}
@@ -1095,7 +1123,7 @@ function StepPhOnemize({
       <button
         onClick={onNext}
         disabled={!stepDone}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
       >
         Continue to train <IoChevronForward />
       </button>
@@ -1128,7 +1156,7 @@ function StepTrain({
 
   return (
     <div className="max-w-lg space-y-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Train the fine-tuned model. You can close this page and return — the job
         continues in the background.
       </p>
@@ -1136,7 +1164,7 @@ function StepTrain({
       <button
         onClick={onRun}
         disabled={running || stepDone}
-        className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-white disabled:opacity-50 ${stepError ? "bg-red-700 hover:bg-red-600" : "bg-gray-900 hover:bg-gray-700"}`}
+        className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm disabled:opacity-50 ${stepError ? "bg-red-700 text-white hover:bg-red-600" : "bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"}`}
       >
         {running ? (
           <>
@@ -1155,15 +1183,15 @@ function StepTrain({
 
       {epochProgress && (
         <div className="space-y-1">
-          <div className="flex justify-between text-xs text-gray-500">
+          <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
             <span>
               Epoch {epochProgress.current} / {epochProgress.total}
             </span>
             <span>{pct}%</span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
             <div
-              className="h-full bg-gray-800 transition-all"
+              className="h-full bg-gray-800 transition-all dark:bg-white"
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -1173,7 +1201,7 @@ function StepTrain({
       {logs.length > 0 && <LogConsole logs={logs} logsEndRef={logsEndRef} />}
 
       {stepError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
           {stepError}
         </div>
       )}
@@ -1181,7 +1209,7 @@ function StepTrain({
       <button
         onClick={onNext}
         disabled={!stepDone}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
       >
         Continue to deploy <IoChevronForward />
       </button>
@@ -1206,20 +1234,20 @@ function StepDeploy({
 }) {
   return (
     <div className="max-w-md space-y-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Deploy your trained voice. It will appear in the voice selector without
         any Docker rebuild.
       </p>
 
       {deployed ? (
-        <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-          <p className="font-medium text-green-800">Voice deployed!</p>
-          <p className="mt-1 text-sm text-green-700">
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+          <p className="font-medium text-green-800 dark:text-green-400">Voice deployed!</p>
+          <p className="mt-1 text-sm text-green-700 dark:text-green-500">
             Voice ID: <code className="font-mono">{deployedVoiceId}</code>
           </p>
           <a
             href="/app/speech-synthesis/text-to-speech"
-            className="mt-3 inline-flex items-center gap-1 text-sm text-green-700 underline"
+            className="mt-3 inline-flex items-center gap-1 text-sm text-green-700 underline dark:text-green-500"
           >
             Try in Text to Speech <IoChevronForward className="h-3 w-3" />
           </a>
@@ -1229,13 +1257,13 @@ function StepDeploy({
           <button
             onClick={onDeploy}
             disabled={deploying}
-            className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
           >
             {deploying ? "Activating…" : "Activate voice"}
           </button>
 
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
               {error}
             </div>
           )}
@@ -1258,7 +1286,7 @@ function StepButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300"
+      className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:disabled:text-gray-600"
     >
       {label}
     </button>

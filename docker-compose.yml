@@ -91,14 +91,37 @@ services:
               count: 1
               capabilities: [gpu]
 
+  frontend:
+    build:
+      context: ./elevenlabs-clone-frontend
+      dockerfile: Dockerfile
+    ports:
+      - '3001:3001'
+    restart: unless-stopped
+    volumes:
+      - ./elevenlabs-clone-frontend:/app
+      - /app/node_modules
+    env_file:
+      - ./elevenlabs-clone-frontend/.env
+    environment:
+      - HOSTNAME=0.0.0.0
+      - STYLETTS2_API_ROUTE=http://styletts2-api:8000
+      - SEED_VC_API_ROUTE=http://seedvc-api:8000
+      - MAKE_AN_AUDIO_API_ROUTE=http://make-an-audio-api:8000
+      - FINETUNE_API_ROUTE=http://finetune-api:8000
+      - JUPYTERLAB_URL=http://jupyterlab:8888
+    depends_on:
+      - styletts2-api
+      - seedvc-api
+      - make-an-audio-api
+      - finetune-api
+
   inngest:
     image: inngest/inngest
     ports:
       - '8288:8288'
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: inngest dev -u http://host.docker.internal:3001/api/inngest
+    command: inngest dev -u http://frontend:3001/api/inngest
 
   jupyterlab:
     image: jupyter/scipy-notebook:latest

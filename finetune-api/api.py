@@ -193,6 +193,30 @@ def generate_config(job_id: str, epochs: int, batch_size: int) -> str:
     config["log_dir"] = f"{jd}/Models"
     config["save_freq"] = 10
     config["epochs"] = epochs
+    # Ensure train_list.txt exists and has enough entries so steps_per_epoch > 0
+    # (StyleTTS2 DataLoader uses drop_last=True, so n_train must be >= batch_size)
+    train_list_path = os.path.join(data_dir, "train_list.txt")
+    val_list_path   = os.path.join(data_dir, "val_list.txt")
+    if os.path.exists(train_list_path):
+        with open(train_list_path) as f:
+            train_lines = [l for l in f.readlines() if l.strip()]
+        # Bootstrap from val_list if train is empty
+        if len(train_lines) == 0 and os.path.exists(val_list_path):
+            with open(val_list_path) as f:
+                train_lines = [l for l in f.readlines() if l.strip()]
+            with open(train_list_path, "w") as f:
+                f.writelines(train_lines)
+        # Duplicate entries until we have at least batch_size
+        if 0 < len(train_lines) < batch_size:
+            original = train_lines[:]
+            while len(train_lines) < batch_size:
+                train_lines += original
+            with open(train_list_path, "w") as f:
+                f.writelines(train_lines)
+        # Clamp batch_size to dataset size
+        if len(train_lines) > 0:
+            batch_size = min(batch_size, len(train_lines))
+
     config["batch_size"] = batch_size
     config["pretrained_model"] = f"{STYLETTS2_PATH}/Models/LibriTTS/epochs_2nd_00020.pth"
     config["second_stage_load_pretrained"] = True
@@ -360,6 +384,16 @@ async def run_step(job_id: str, req: RunStepRequest, background_tasks: Backgroun
         script_src = os.path.join(FINETUNE_SCRIPTS, "makeDataset/tools/phonemized.py")
         script_dst = os.path.join(jd, "phonemized.py")
         shutil.copy(script_src, script_dst)
+        # Fix sort key: split("_")[1] breaks on filenames with underscores;
+        # rsplit("_", 1) always grabs the segment index at the end.
+        with open(script_dst) as f:
+            phonemize_content = f.read()
+        phonemize_content = phonemize_content.replace(
+            'key=lambda x: int(x[0].split("_")[1].split(".")[0])',
+            'key=lambda x: int(x[0].rsplit("_", 1)[1].split(".")[0])',
+        )
+        with open(script_dst, "w") as f:
+            f.write(phonemize_content)
         language = job.get("language", "en-us")
         cmd = ["python", "phonemized.py", "--language", language]
         background_tasks.add_task(_run_phonemize, job_id, cmd, jd)
@@ -405,6 +439,8 @@ async def _run_phonemize(job_id: str, cmd: list[str], jd: str):
     val_list   = os.path.join(data_dir, "val_list.txt")
 
     log_file = log_path(job_id)
+
+    # If train_list is empty, bootstrap from val_list
     if (os.path.exists(train_list) and os.path.getsize(train_list) == 0
             and os.path.exists(val_list) and os.path.getsize(val_list) > 0):
         shutil.copy(val_list, train_list)
@@ -413,6 +449,27 @@ async def _run_phonemize(job_id: str, cmd: list[str], jd: str):
                 "[finetune-api] train_list.txt was empty — "
                 "copied val_list.txt so training has at least one example.\n"
             )
+
+    # Ensure train_list has at least batch_size entries so steps_per_epoch > 0
+    job_row = db_fetchone("SELECT batchSize FROM TrainingJob WHERE id = ?", (job_id,))
+    batch_size = job_row["batchSize"] if job_row else 2
+    if os.path.exists(train_list):
+        with open(train_list) as f:
+            train_lines = [l for l in f.readlines() if l.strip()]
+        original_count = len(train_lines)
+        if 0 < original_count < batch_size:
+            # Duplicate lines until we reach batch_size (drop_last=True requires N >= batch_size)
+            while len(train_lines) < batch_size:
+                train_lines += train_lines
+            with open(train_list, "w") as f:
+                f.writelines(train_lines)
+            with open(log_file, "a") as lf:
+                lf.write(
+                    f"[finetune-api] train_list.txt had {original_count} entr"
+                    f"{'y' if original_count == 1 else 'ies'} "
+                    f"(< batch_size={batch_size}) — duplicated to {len(train_lines)} "
+                    "entries so steps_per_epoch > 0.\n"
+                )
 
 
 def _fmt_ts(t: float) -> str:
@@ -663,3 +720,94 @@ async def delete_job(job_id: str):
 async def list_voices():
     voices = db_fetchall("SELECT * FROM VoiceModel WHERE isActive = 1")
     return {"voices": voices}
+
+
+@app.delete("/voices/{voice_id}", dependencies=[Depends(verify_api_key)])
+async def delete_voice(voice_id: str):
+    """Delete a deployed voice — removes workspace files and marks inactive in DB."""
+    voice = db_fetchone("SELECT * FROM VoiceModel WHERE voiceId = ?", (voice_id,))
+    if not voice:
+        raise HTTPException(status_code=404, detail="Voice not found")
+
+    voice_dir = os.path.join(VOICES_DIR, voice_id)
+    if os.path.exists(voice_dir):
+        shutil.rmtree(voice_dir)
+
+    db_execute(
+        "UPDATE VoiceModel SET isActive = 0, checkpointPath = NULL, referenceAudioPath = NULL, "
+        "updatedAt = datetime('now') WHERE voiceId = ?",
+        (voice_id,),
+    )
+    return {"deleted": True}
+
+
+@app.get("/voices/{voice_id}/files", dependencies=[Depends(verify_api_key)])
+async def list_voice_files(voice_id: str):
+    """List files for a voice: deployed files + uploaded training WAVs."""
+    row = db_fetchone(
+        "SELECT vm.*, tj.jobWorkDir FROM VoiceModel vm "
+        "LEFT JOIN TrainingJob tj ON tj.voiceModelId = vm.id "
+        "WHERE vm.voiceId = ?",
+        (voice_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Voice not found")
+
+    files = []
+
+    # Deployed files (checkpoint + reference audio)
+    voice_dir = os.path.join(VOICES_DIR, voice_id)
+    if os.path.exists(voice_dir):
+        for fname in sorted(os.listdir(voice_dir)):
+            fpath = os.path.join(voice_dir, fname)
+            if os.path.isfile(fpath):
+                files.append({"name": fname, "size": os.path.getsize(fpath), "category": "deployed"})
+
+    # Training WAVs (original uploaded audio)
+    job_work_dir = row["jobWorkDir"] if row["jobWorkDir"] else None
+    if job_work_dir:
+        audio_dir = os.path.join(job_work_dir, "audio")
+        if os.path.exists(audio_dir):
+            for fname in sorted(os.listdir(audio_dir)):
+                if fname.lower().endswith(".wav"):
+                    fpath = os.path.join(audio_dir, fname)
+                    files.append({"name": fname, "size": os.path.getsize(fpath), "category": "training"})
+
+    return {"voiceName": row["name"], "files": files}
+
+
+@app.delete("/voices/{voice_id}/files/{filename}", dependencies=[Depends(verify_api_key)])
+async def delete_voice_file(voice_id: str, filename: str):
+    """Delete a single file (deployed or training WAV) for a voice."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    row = db_fetchone(
+        "SELECT vm.*, tj.jobWorkDir FROM VoiceModel vm "
+        "LEFT JOIN TrainingJob tj ON tj.voiceModelId = vm.id "
+        "WHERE vm.voiceId = ?",
+        (voice_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Voice not found")
+
+    # Check deployed directory first
+    deployed_path = os.path.join(VOICES_DIR, voice_id, filename)
+    if os.path.isfile(deployed_path):
+        os.remove(deployed_path)
+        if filename == "reference.wav":
+            db_execute(
+                "UPDATE VoiceModel SET referenceAudioPath = NULL, updatedAt = datetime('now') WHERE voiceId = ?",
+                (voice_id,),
+            )
+        return {"deleted": True, "category": "deployed"}
+
+    # Check training audio directory
+    job_work_dir = row["jobWorkDir"] if row["jobWorkDir"] else None
+    if job_work_dir:
+        training_path = os.path.join(job_work_dir, "audio", filename)
+        if os.path.isfile(training_path):
+            os.remove(training_path)
+            return {"deleted": True, "category": "training"}
+
+    raise HTTPException(status_code=404, detail="File not found")

@@ -21,7 +21,7 @@ import toast from "react-hot-toast";
 
 const MAX_CHARS = 500;
 
-export function SoundEffectsGenerator({ credits }: { credits: number }) {
+export function SoundEffectsGenerator() {
   const [textContent, setTextContent] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [activePlaceholder, setActivePlaceholder] = useState(
@@ -142,7 +142,7 @@ export function SoundEffectsGenerator({ credits }: { credits: number }) {
 
         <div className="relative z-10 flex h-full w-full flex-col items-center gap-10 md:pt-20">
           <div
-            className={`h-fit w-full max-w-2xl rounded-xl border bg-white p-4 shadow-xl transition-colors duration-200 ${isFocused ? "border-black" : "border-gray-200"}`}
+            className={`h-fit w-full max-w-2xl rounded-xl border bg-white p-4 shadow-xl transition-colors duration-200 dark:bg-gray-800 ${isFocused ? "border-black dark:border-white" : "border-gray-200 dark:border-gray-700"}`}
           >
             <div className="flex flex-col">
               <textarea
@@ -157,7 +157,7 @@ export function SoundEffectsGenerator({ credits }: { credits: number }) {
                 onBlur={() => setIsFocused(false)}
                 maxLength={MAX_CHARS}
                 placeholder={activePlaceholder}
-                className="h-16 resize-none rounded-md p-2 placeholder:font-light placeholder:text-gray-500 focus:border-none focus:outline-none focus:ring-0"
+                className="h-16 w-full resize-none rounded-md bg-transparent p-2 placeholder:font-light placeholder:text-gray-500 focus:border-none focus:outline-none focus:ring-0 dark:text-gray-200 dark:placeholder-gray-600"
               />
               <div className="mt-1 flex w-full justify-end">
                 <span className="text-xs text-gray-400">
@@ -171,14 +171,13 @@ export function SoundEffectsGenerator({ credits }: { credits: number }) {
                   isLoading={loading}
                   buttonText="Generate Sound Effect"
                   showDownload={false}
-                  creditsRemaining={credits}
                   fullWidth={false}
                 />
               </div>
             </div>
           </div>
 
-          <div className="h-fit w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-4 shadow-lg">
+          <div className="h-fit w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-4 shadow-lg dark:border-gray-700 dark:bg-gray-800">
             <p className="mb-2 text-center text-sm text-gray-500">
               Try a sound effect example
             </p>
@@ -195,7 +194,7 @@ export function SoundEffectsGenerator({ credits }: { credits: number }) {
                 { text: "Helicopter flyby", icon: <IoAirplaneOutline /> },
               ].map(({ text, icon }) => (
                 <button
-                  className="flex items-center rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs hover:bg-gray-50"
+                  className="flex items-center rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                   key={text}
                   onMouseEnter={() =>
                     setActivePlaceholder(

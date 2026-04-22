@@ -20,7 +20,7 @@ export function GenerateButton({
   isDisabled?: boolean;
   isLoading?: boolean;
   showDownload?: boolean;
-  creditsRemaining: number;
+  creditsRemaining?: number;
   characterCount?: number;
   characterLimit?: number;
   buttonText?: string;
@@ -36,7 +36,7 @@ export function GenerateButton({
       {(showCredits ||
         (showCharacterCount && characterCount !== undefined)) && (
         <div className="items-cetner flex w-full flex-wrap justify-between gap-2">
-          {showCredits && (
+          {showCredits && creditsRemaining !== undefined && (
             <div className="flex items-center">
               <span className="tetx-gray-500 text-xs">
                 {creditsRemaining.toLocaleString()} credits remaining
@@ -61,7 +61,7 @@ export function GenerateButton({
       >
         {showDownload && (
           <button
-            className="hidden min-h-9 min-w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 lg:flex"
+            className="hidden min-h-9 min-w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 lg:flex"
             type="button"
             disabled={true}
           >
@@ -70,7 +70,7 @@ export function GenerateButton({
         )}
 
         <button
-          className={`h-9 w-full whitespace-nowrap rounded-lg bg-black px-3 text-sm font-medium text-white ${isDisabled ? "cursor-not-allowed opacity-50" : "hover:bg-gray-800"}`}
+          className={`h-9 w-full whitespace-nowrap rounded-lg bg-black px-3 text-sm font-medium text-white dark:bg-white dark:text-black ${isDisabled ? "cursor-not-allowed opacity-50" : "hover:bg-gray-800 dark:hover:bg-gray-100"}`}
           onClick={onGenerate}
           disabled={isDisabled || isLoading}
         >

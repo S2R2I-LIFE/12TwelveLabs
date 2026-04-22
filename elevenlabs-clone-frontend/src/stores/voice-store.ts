@@ -50,6 +50,7 @@ interface VoiceState {
   getSelectedVoice: (service: ServiceType) => Voice | null;
   selectVoice: (service: ServiceType, voice: string) => void;
   setVoices: (incoming: Voice[]) => void;
+  removeVoice: (service: ServiceType, voiceId: string) => void;
 }
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
@@ -96,6 +97,24 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         }
       }
       return { voices: merged, isInitialized: true };
+    });
+  },
+  removeVoice: (service, voiceId) => {
+    set((state) => {
+      const voices = state.voices.filter(
+        (v) => !(v.id === voiceId && v.service === service),
+      );
+      const current = state.selectedVoices[service];
+      return {
+        voices,
+        selectedVoices: {
+          ...state.selectedVoices,
+          [service]:
+            current?.id === voiceId
+              ? (voices.find((v) => v.service === service) ?? null)
+              : current,
+        },
+      };
     });
   },
 }));

@@ -97,17 +97,6 @@ export const aiGenerationFunction = inngest.createFunction(
       });
     });
 
-    const deductCredits = await step.run("deduct-credits", async () => {
-      return await db.user.update({
-        where: { id: audioClip.userId },
-        data: {
-          credits: {
-            decrement: 50,
-          },
-        },
-      });
-    });
-
     return { success: true };
   },
 );

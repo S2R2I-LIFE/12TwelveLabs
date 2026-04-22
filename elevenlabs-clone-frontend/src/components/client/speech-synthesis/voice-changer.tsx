@@ -66,10 +66,8 @@ async function blobToWavFile(blob: Blob, name: string): Promise<File> {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function VoiceChanger({
-  credits,
   service,
 }: {
-  credits: number;
   service: ServiceType;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -243,7 +241,7 @@ export function VoiceChanger({
         <div className="flex flex-1 flex-col items-center justify-center gap-4 py-8">
           {/* Drop zone */}
           <div
-            className={`w-full max-w-xl rounded-2xl border-2 border-dotted p-8 transition-all duration-200 ${isDragging ? "border-blue-400 bg-blue-50" : "border-gray-300"} ${file ? "bg-white" : "bg-gray-50"}`}
+            className={`w-full max-w-xl rounded-2xl border-2 border-dotted p-8 transition-all duration-200 ${isDragging ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20" : "border-gray-300 dark:border-gray-600"} ${file ? "bg-white dark:bg-gray-800" : "bg-gray-50 dark:bg-gray-800"}`}
             onDragOver={() => setIsDragging(true)}
             onDragLeave={() => setIsDragging(false)}
             onDrop={(e) => {
@@ -271,11 +269,11 @@ export function VoiceChanger({
           >
             {file ? (
               <div className="flex flex-col items-center text-center">
-                <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3">
+                <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-700">
                   <FaUpload className="h-4 w-4 text-blue-400" />
                 </div>
-                <p className="mb-1 text-sm font-medium">{file.name}</p>
-                <p className="mb-1 text-sm font-medium">
+                <p className="mb-1 text-sm font-medium dark:text-gray-200">{file.name}</p>
+                <p className="mb-1 text-sm font-medium dark:text-gray-200">
                   {(file.size / (1024 * 1024)).toFixed(2)} MB
                 </p>
                 <button
@@ -291,13 +289,13 @@ export function VoiceChanger({
               </div>
             ) : (
               <div className="flex cursor-pointer flex-col items-center py-8 text-center">
-                <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3">
-                  <FaUpload className="h-4 w-4 text-gray-500" />
+                <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-700">
+                  <FaUpload className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                 </div>
-                <p className="mb-1 text-sm font-medium">
+                <p className="mb-1 text-sm font-medium dark:text-gray-200">
                   Click to upload, or drag and drop
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   MP3 or WAV files only, up to 50MB
                 </p>
               </div>
@@ -317,7 +315,7 @@ export function VoiceChanger({
                 <button
                   onClick={startRecording}
                   disabled={isLoading}
-                  className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                 >
                   <IoMicOutline className="h-4 w-4" />
                   Record from microphone
@@ -355,7 +353,6 @@ export function VoiceChanger({
           isDisabled={!file || isLoading}
           isLoading={isLoading}
           showDownload={true}
-          creditsRemaining={credits}
           buttonText="Convert Voice"
         />
       </div>

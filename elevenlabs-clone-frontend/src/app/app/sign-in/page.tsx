@@ -61,18 +61,18 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="flex min-h-screen w-full">
+    <div className="flex min-h-screen w-full bg-white dark:bg-gray-950">
       <div className="relative w-full lg:w-1/2">
         <div className="absolute left-8 top-6">
-          <span className="text-xl font-bold tracking-tight text-black">
+          <span className="text-xl font-bold tracking-tight text-black dark:text-white">
             12TwelveLabs
           </span>
         </div>
 
         {/* Centered sign up form */}
         <div className="flex min-h-screen items-center justify-center">
-          <div className="w-full max-w-md p-8">
-            <h2 className="mb-6 text-center text-2xl font-semibold">
+          <div className="w-full max-w-md p-4 sm:p-8">
+            <h2 className="mb-6 text-center text-2xl font-semibold dark:text-white">
               Log in to your account
             </h2>
 
@@ -86,7 +86,7 @@ export default function SignInPage() {
               <div className="mb-4">
                 <label
                   htmlFor="email"
-                  className="mb-1 block text-sm font-medium text-black"
+                  className="mb-1 block text-sm font-medium text-black dark:text-gray-200"
                 >
                   Email
                 </label>
@@ -96,7 +96,7 @@ export default function SignInPage() {
                   {...register("email")}
                   placeholder="Enter your email address"
                   required
-                  className="w-full rounded-lg border border-gray-200 p-2 placeholder:text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
+                  className="w-full rounded-lg border border-gray-200 bg-white p-2 placeholder:text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500 dark:focus:border-gray-400 dark:focus:ring-gray-400"
                 />
                 {errors.email && (
                   <p className="mt-1 text-xs text-red-500">
@@ -108,7 +108,7 @@ export default function SignInPage() {
               <div className="mb-4">
                 <label
                   htmlFor="password"
-                  className="mb-1 block text-sm font-medium text-black"
+                  className="mb-1 block text-sm font-medium text-black dark:text-gray-200"
                 >
                   Password
                 </label>
@@ -118,7 +118,7 @@ export default function SignInPage() {
                   {...register("password")}
                   placeholder="Enter your password"
                   required
-                  className="w-full rounded-lg border border-gray-200 p-2 placeholder:text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
+                  className="w-full rounded-lg border border-gray-200 bg-white p-2 placeholder:text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500 dark:focus:border-gray-400 dark:focus:ring-gray-400"
                 />
                 {errors.password && (
                   <p className="mt-1 text-xs text-red-500">
@@ -162,10 +162,10 @@ export default function SignInPage() {
               </button>
 
               <div className="text-center">
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
                   Don't have an account?{" "}
                   <a
-                    className="font-medium text-black underline"
+                    className="font-medium text-black underline dark:text-white"
                     href="/app/sign-up"
                   >
                     Sign up

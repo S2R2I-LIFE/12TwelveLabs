@@ -49,9 +49,9 @@ export function HistoryList({ historyItems }: { historyItems: HistoryItem[] }) {
 
         {/* Content */}
         <div className="relative z-10 flex h-full w-full flex-col items-center md:pt-10">
-          <div className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
+          <div className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-800">
             <div className="mb-4">
-              <h2 className="text-lg font-medium">Recent Sound Effects</h2>
+              <h2 className="text-lg font-medium dark:text-gray-100">Recent Sound Effects</h2>
             </div>
 
             {historyItems.length > 0 ? (
@@ -67,7 +67,7 @@ export function HistoryList({ historyItems }: { historyItems: HistoryItem[] }) {
                       {items.map((item) => (
                         <div
                           key={item.id}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 bg-white p-4 hover:bg-gray-50 md:gap-0"
+                          className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 bg-white p-4 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 md:gap-0"
                         >
                           {/* Left side */}
                           <div className="flex min-w-0 flex-1 items-center">
@@ -105,7 +105,7 @@ export function HistoryList({ historyItems }: { historyItems: HistoryItem[] }) {
                                     });
                                   }
                                 }}
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
                               >
                                 <IoPlayOutline className="h-4 w-4" />
                               </button>
@@ -120,7 +120,7 @@ export function HistoryList({ historyItems }: { historyItems: HistoryItem[] }) {
                                     document.body.removeChild(a);
                                   }
                                 }}
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
                               >
                                 <IoDownloadOutline className="h-4 w-4" />
                               </button>

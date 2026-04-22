@@ -6,17 +6,20 @@ interface UIState {
   isMobileDrawerOpen: boolean;
   isMobileMenuOpen: boolean;
   isMobileScreen: boolean;
+  isDarkMode: boolean;
   activeTab: TabType;
   toggleMobileDrawer: () => void;
   toggleMobileMenu: () => void;
   setMobileScreen: (isMobile: boolean) => void;
   setActiveTab: (tab: TabType) => void;
+  toggleDarkMode: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   isMobileDrawerOpen: false,
   isMobileMenuOpen: false,
   isMobileScreen: false,
+  isDarkMode: false,
   activeTab: "settings",
   toggleMobileDrawer: () =>
     set((state) => ({ isMobileDrawerOpen: !state.isMobileDrawerOpen })),
@@ -24,4 +27,5 @@ export const useUIStore = create<UIState>((set) => ({
     set((state) => ({ isMobileMenuOpen: !state.isMobileMenuOpen })),
   setMobileScreen: (isMobile) => set(() => ({ isMobileScreen: isMobile })),
   setActiveTab: (tab) => set(() => ({ activeTab: tab })),
+  toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
 }));
