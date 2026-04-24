@@ -342,13 +342,21 @@ export function TrainWizard({
     if (!voiceName.trim()) return;
     setCreating(true);
     try {
-      const resp = await fetch("/api/voice-lab/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voiceName, language, trainingEpochs: epochs, batchSize }),
-      });
-      const data = await resp.json();
-      setJob({ jobId: data.jobId, voiceModelId: data.voiceModelId });
+      if (job) {
+        await fetch(`/api/voice-lab/jobs/${job.jobId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trainingEpochs: epochs, batchSize }),
+        });
+      } else {
+        const resp = await fetch("/api/voice-lab/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ voiceName, language, trainingEpochs: epochs, batchSize }),
+        });
+        const data = await resp.json() as { jobId: string; voiceModelId: string };
+        setJob({ jobId: data.jobId, voiceModelId: data.voiceModelId });
+      }
       goToStep(2);
     } catch (e) {
       console.error(e);
@@ -386,6 +394,19 @@ export function TrainWizard({
       setUploading(false);
     }
   };
+
+  const handleDeleteServerFile = useCallback(
+    async (name: string) => {
+      if (!job) return;
+      await fetch(`/api/voice-lab/voices/${job.voiceModelId}/files`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: name }),
+      });
+      setServerFiles((prev) => prev.filter((f) => f.name !== name));
+    },
+    [job],
+  );
 
   const handleCurate = async () => {
     if (!job) return;
@@ -548,6 +569,7 @@ export function TrainWizard({
             setBatchSize={setBatchSize}
             onCreate={handleCreateJob}
             creating={creating}
+            hasJob={job !== null}
           />
         )}
 
@@ -564,6 +586,9 @@ export function TrainWizard({
             onAddRecording={(file) =>
               setUploadedFiles((prev) => [...prev, file])
             }
+            onBack={goBack}
+            serverFiles={serverFiles}
+            onDeleteServerFile={handleDeleteServerFile}
           />
         )}
 
@@ -575,8 +600,10 @@ export function TrainWizard({
             stepDone={stepDone}
             stepError={stepError}
             onRunStep={runStep}
-            onNext={() => setStep(4)}
+            onNext={() => goToStep(4)}
+            onBack={goBack}
             logsEndRef={logsEndRef}
+            wasCompleted={maxStepReached.current > 3}
           />
         )}
 
@@ -587,6 +614,7 @@ export function TrainWizard({
             excluded={excluded}
             setExcluded={setExcluded}
             onNext={handleCurate}
+            onBack={goBack}
           />
         )}
 
@@ -597,7 +625,8 @@ export function TrainWizard({
             stepDone={stepDone}
             stepError={stepError}
             onRun={() => runStep("phonemize")}
-            onNext={() => setStep(6)}
+            onNext={() => goToStep(6)}
+            onBack={goBack}
             logsEndRef={logsEndRef}
           />
         )}
@@ -610,7 +639,8 @@ export function TrainWizard({
             stepError={stepError}
             epochProgress={epochProgress}
             onRun={() => runStep("train", epochs)}
-            onNext={() => { setTrainingFinished(true); setStep(7); }}
+            onNext={() => { setTrainingFinished(true); goToStep(7); }}
+            onBack={goBack}
             logsEndRef={logsEndRef}
           />
         )}
@@ -623,6 +653,7 @@ export function TrainWizard({
             deploying={deploying}
             onDeploy={handleDeploy}
             error={deployError}
+            onBack={goBack}
           />
         )}
       </div>
@@ -643,6 +674,7 @@ function StepNameVoice({
   setBatchSize,
   onCreate,
   creating,
+  hasJob,
 }: {
   voiceName: string;
   setVoiceName: (v: string) => void;
@@ -654,6 +686,7 @@ function StepNameVoice({
   setBatchSize: (v: number) => void;
   onCreate: () => void;
   creating: boolean;
+  hasJob: boolean;
 }) {
   return (
     <div className="max-w-md space-y-5">
@@ -731,7 +764,7 @@ function StepNameVoice({
         disabled={!voiceName.trim() || creating}
         className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
       >
-        {creating ? "Creating…" : "Create job"}
+        {creating ? "Saving…" : hasJob ? "Save & continue" : "Create job"}
         {!creating && <IoChevronForward />}
       </button>
     </div>
@@ -839,6 +872,9 @@ function StepUpload({
   uploading,
   fileInputRef,
   onAddRecording,
+  onBack,
+  serverFiles,
+  onDeleteServerFile,
 }: {
   files: File[];
   onSelect: (f: FileList | null) => void;
@@ -847,6 +883,9 @@ function StepUpload({
   uploading: boolean;
   fileInputRef: React.RefObject<HTMLInputElement>;
   onAddRecording: (f: File) => void;
+  onBack: () => void;
+  serverFiles: { name: string; size: number }[];
+  onDeleteServerFile: (name: string) => Promise<void>;
 }) {
   const totalMB = files.reduce((s, f) => s + f.size / 1024 / 1024, 0);
 
@@ -856,6 +895,35 @@ function StepUpload({
         Upload audio files for training. At least 5 minutes of clean speech is
         recommended.
       </p>
+
+      {serverFiles.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            Already uploaded
+          </p>
+          <ul className="space-y-1 text-sm">
+            {serverFiles.map((f) => (
+              <li
+                key={f.name}
+                className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800/50"
+              >
+                <span className="truncate text-gray-700 dark:text-gray-300">{f.name}</span>
+                <div className="ml-2 flex items-center gap-3">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    {(f.size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                  <button
+                    onClick={() => onDeleteServerFile(f.name)}
+                    className="text-gray-400 hover:text-red-500 dark:text-gray-500"
+                  >
+                    <IoTrashOutline />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Drop zone */}
       <div
@@ -920,14 +988,22 @@ function StepUpload({
         </ul>
       )}
 
-      <button
-        onClick={onNext}
-        disabled={files.length === 0 || uploading}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-      >
-        {uploading ? "Uploading…" : "Upload & continue"}
-        {!uploading && <IoChevronForward />}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+        >
+          ← Back
+        </button>
+        <button
+          onClick={onNext}
+          disabled={(files.length === 0 && serverFiles.length === 0) || uploading}
+          className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+        >
+          {uploading ? "Uploading…" : "Upload & continue"}
+          {!uploading && <IoChevronForward />}
+        </button>
+      </div>
     </div>
   );
 }
@@ -958,6 +1034,8 @@ function StepPreprocess({
   onRunStep,
   onNext,
   logsEndRef,
+  onBack,
+  wasCompleted,
 }: {
   jobId: string;
   logs: string[];
@@ -967,9 +1045,11 @@ function StepPreprocess({
   onRunStep: (step: string) => void;
   onNext: () => void;
   logsEndRef: React.RefObject<HTMLDivElement>;
+  onBack: () => void;
+  wasCompleted?: boolean;
 }) {
-  const [ranTranscribe, setRanTranscribe] = useState(false);
-  const [ranSegment, setRanSegment] = useState(false);
+  const [ranTranscribe, setRanTranscribe] = useState(wasCompleted ?? false);
+  const [ranSegment, setRanSegment] = useState(wasCompleted ?? false);
 
   return (
     <div className="max-w-lg space-y-4">
@@ -1014,13 +1094,21 @@ function StepPreprocess({
         </div>
       )}
 
-      <button
-        onClick={onNext}
-        disabled={!ranSegment}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-      >
-        Continue to curate <IoChevronForward />
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+        >
+          ← Back
+        </button>
+        <button
+          onClick={onNext}
+          disabled={!ranSegment}
+          className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+        >
+          Continue to curate <IoChevronForward />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1031,12 +1119,14 @@ function StepCurate({
   excluded,
   setExcluded,
   onNext,
+  onBack,
 }: {
   clips: Clip[];
   loading: boolean;
   excluded: Set<string>;
   setExcluded: React.Dispatch<React.SetStateAction<Set<string>>>;
   onNext: () => void;
+  onBack: () => void;
 }) {
   const toggle = (name: string) =>
     setExcluded((prev) => {
@@ -1108,13 +1198,21 @@ function StepCurate({
         {clips.length - excluded.size} / {clips.length} clips kept
       </p>
 
-      <button
-        onClick={onNext}
-        disabled={loading}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-      >
-        Save & continue <IoChevronForward />
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+        >
+          ← Back
+        </button>
+        <button
+          onClick={onNext}
+          disabled={loading}
+          className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+        >
+          Save & continue <IoChevronForward />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1127,6 +1225,7 @@ function StepPhOnemize({
   onRun,
   onNext,
   logsEndRef,
+  onBack,
 }: {
   logs: string[];
   running: boolean;
@@ -1135,6 +1234,7 @@ function StepPhOnemize({
   onRun: () => void;
   onNext: () => void;
   logsEndRef: React.RefObject<HTMLDivElement>;
+  onBack: () => void;
 }) {
   return (
     <div className="max-w-lg space-y-4">
@@ -1168,13 +1268,21 @@ function StepPhOnemize({
         </div>
       )}
 
-      <button
-        onClick={onNext}
-        disabled={!stepDone}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-      >
-        Continue to train <IoChevronForward />
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+        >
+          ← Back
+        </button>
+        <button
+          onClick={onNext}
+          disabled={!stepDone}
+          className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+        >
+          Continue to train <IoChevronForward />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1188,6 +1296,7 @@ function StepTrain({
   onRun,
   onNext,
   logsEndRef,
+  onBack,
 }: {
   logs: string[];
   running: boolean;
@@ -1197,6 +1306,7 @@ function StepTrain({
   onRun: () => void;
   onNext: () => void;
   logsEndRef: React.RefObject<HTMLDivElement>;
+  onBack: () => void;
 }) {
   const pct = epochProgress
     ? Math.round((epochProgress.current / epochProgress.total) * 100)
@@ -1254,13 +1364,21 @@ function StepTrain({
         </div>
       )}
 
-      <button
-        onClick={onNext}
-        disabled={!stepDone}
-        className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-      >
-        Continue to deploy <IoChevronForward />
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+        >
+          ← Back
+        </button>
+        <button
+          onClick={onNext}
+          disabled={!stepDone}
+          className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+        >
+          Continue to deploy <IoChevronForward />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1272,6 +1390,7 @@ function StepDeploy({
   deploying,
   onDeploy,
   error,
+  onBack,
 }: {
   voiceModelId: string;
   deployed: boolean;
@@ -1279,6 +1398,7 @@ function StepDeploy({
   deploying: boolean;
   onDeploy: () => void;
   error: string | null;
+  onBack: () => void;
 }) {
   return (
     <div className="max-w-md space-y-4">
@@ -1302,13 +1422,21 @@ function StepDeploy({
         </div>
       ) : (
         <>
-          <button
-            onClick={onDeploy}
-            disabled={deploying}
-            className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-          >
-            {deploying ? "Activating…" : "Activate voice"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+            >
+              ← Back
+            </button>
+            <button
+              onClick={onDeploy}
+              disabled={deploying}
+              className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+            >
+              {deploying ? "Activating…" : "Activate voice"}
+            </button>
+          </div>
 
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
