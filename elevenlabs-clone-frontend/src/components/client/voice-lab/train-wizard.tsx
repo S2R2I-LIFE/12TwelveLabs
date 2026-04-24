@@ -124,6 +124,10 @@ export function TrainWizard({
   const [step, setStep] = useState(
     initialJob ? statusToStep(initialJob.status) : 1,
   );
+  const maxStepReached = useRef(
+    initialJob ? statusToStep(initialJob.status) : 1,
+  );
+  const [serverFiles, setServerFiles] = useState<{ name: string; size: number }[]>([]);
   const [job, setJob] = useState<JobState | null>(
     initialJob
       ? { jobId: initialJob.id, voiceModelId: initialJob.voiceModelId }
@@ -198,6 +202,18 @@ export function TrainWizard({
     setStepError(null);
     setRunning(false);
   }, [step]);
+
+  // Fetch already-uploaded audio files when returning to step 2
+  useEffect(() => {
+    if (step === 2 && job) {
+      fetch(`/api/voice-lab/jobs/${job.jobId}/audio`)
+        .then((r) => r.json())
+        .then((d: { files?: { name: string; size: number }[] }) =>
+          setServerFiles(d.files ?? []),
+        )
+        .catch(console.error);
+    }
+  }, [step, job]);
 
   // Load clips when entering step 4
   useEffect(() => {
@@ -279,6 +295,20 @@ export function TrainWizard({
     [],
   );
 
+  const goToStep = useCallback((n: number) => {
+    maxStepReached.current = Math.max(maxStepReached.current, n);
+    setStep(n);
+  }, []);
+
+  const goBack = useCallback(() => {
+    if (running) {
+      setStepError("A step is still running. Results may be incomplete.");
+    }
+    esRef.current?.close();
+    setRunning(false);
+    setStep((s) => s - 1);
+  }, [running]);
+
   const STEP_LABELS_MAP: Record<string, string> = {
     "silence-buffer": "Silence Buffer",
     "transcribe": "Transcribe",
@@ -319,7 +349,7 @@ export function TrainWizard({
       });
       const data = await resp.json();
       setJob({ jobId: data.jobId, voiceModelId: data.voiceModelId });
-      setStep(2);
+      goToStep(2);
     } catch (e) {
       console.error(e);
     } finally {
@@ -327,12 +357,14 @@ export function TrainWizard({
     }
   };
 
+  const ACCEPTED_AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".mp4", ".flac", ".ogg", ".webm", ".aac"];
+
   const handleFileSelect = (files: FileList | null) => {
     if (!files) return;
-    const wavFiles = Array.from(files).filter((f) =>
-      f.name.toLowerCase().endsWith(".wav"),
+    const audioFiles = Array.from(files).filter((f) =>
+      ACCEPTED_AUDIO_EXTS.some((ext) => f.name.toLowerCase().endsWith(ext)),
     );
-    setUploadedFiles((prev) => [...prev, ...wavFiles]);
+    setUploadedFiles((prev) => [...prev, ...audioFiles]);
   };
 
   const handleUploadFiles = async () => {
@@ -347,7 +379,7 @@ export function TrainWizard({
           body: fd,
         });
       }
-      setStep(3);
+      goToStep(3);
     } catch (e) {
       console.error(e);
     } finally {
@@ -362,7 +394,7 @@ export function TrainWizard({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ excludeFiles: Array.from(excluded) }),
     });
-    setStep(5);
+    goToStep(5);
   };
 
   const handleDeploy = async () => {
@@ -408,6 +440,7 @@ export function TrainWizard({
     setEpochs(75);
     setBatchSize(2);
     setUploadedFiles([]);
+    setServerFiles([]);
     setLogs([]);          // full history cleared on new voice
     setRunning(false);
     setStepDone(false);
@@ -436,8 +469,13 @@ export function TrainWizard({
             const n = idx + 1;
             const done = n < step;
             const active = n === step;
+            const clickable = !active && n <= maxStepReached.current;
             return (
-              <div key={n} className="flex flex-shrink-0 flex-col items-center gap-1">
+              <div
+                key={n}
+                onClick={() => { if (clickable) setStep(n); }}
+                className={`flex flex-shrink-0 flex-col items-center gap-1 ${clickable ? "cursor-pointer" : "cursor-default"}`}
+              >
                 <div
                   className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${active ? "bg-gray-900 text-white" : done ? "bg-green-500 text-white" : "bg-gray-200 text-gray-400"}`}
                 >
@@ -459,10 +497,12 @@ export function TrainWizard({
             const n = idx + 1;
             const done = n < step;
             const active = n === step;
+            const clickable = !active && n <= maxStepReached.current;
             return (
               <li
                 key={n}
-                className={`flex cursor-default items-center gap-2 rounded-lg px-3 py-2 text-sm ${active ? "bg-gray-100 font-medium text-gray-900 dark:bg-gray-700 dark:text-white" : done ? "text-gray-500 dark:text-gray-400" : "text-gray-400 dark:text-gray-600"}`}
+                onClick={() => { if (clickable) setStep(n); }}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${active ? "bg-gray-100 font-medium text-gray-900 dark:bg-gray-700 dark:text-white" : done && clickable ? "cursor-pointer text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800" : "cursor-default text-gray-400 dark:text-gray-600"}`}
               >
                 {done ? (
                   <IoCheckmarkCircle className="h-4 w-4 text-green-500" />
@@ -487,6 +527,11 @@ export function TrainWizard({
             {resetting ? "Resetting…" : "New voice"}
           </button>
         )}
+
+        {/* Live system stats — desktop only */}
+        <div className="hidden md:block">
+          <SystemStats />
+        </div>
       </div>
 
       {/* Right content */}
@@ -808,7 +853,7 @@ function StepUpload({
   return (
     <div className="max-w-lg space-y-4">
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        Upload WAV files for training. At least 5 minutes of clean speech is
+        Upload audio files for training. At least 5 minutes of clean speech is
         recommended.
       </p>
 
@@ -824,12 +869,15 @@ function StepUpload({
       >
         <IoCloudUploadOutline className="mb-2 h-8 w-8 text-gray-400 dark:text-gray-500" />
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Click or drag WAV files here
+          Click or drag audio files here
+        </p>
+        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+          WAV, MP3, M4A, FLAC, OGG and more — all converted to WAV automatically
         </p>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".wav"
+          accept=".wav,.mp3,.m4a,.mp4,.flac,.ogg,.webm,.aac"
           multiple
           className="hidden"
           onChange={(e) => onSelect(e.target.files)}
@@ -1290,5 +1338,87 @@ function StepButton({
     >
       {label}
     </button>
+  );
+}
+
+// ── System stats widget ────────────────────────────────────────────────────────
+
+interface StatsPayload {
+  cpu: number;
+  ram: number;
+  gpu: number | null;
+  vramUsed: number | null;
+  vramTotal: number | null;
+}
+
+function StatBar({ pct }: { pct: number }) {
+  const color =
+    pct > 80 ? "bg-red-500" : pct > 60 ? "bg-yellow-500" : "bg-green-500";
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+      <div
+        className={`h-1.5 rounded-full transition-all duration-500 ${color}`}
+        style={{ width: `${Math.min(pct, 100)}%` }}
+      />
+    </div>
+  );
+}
+
+function SystemStats() {
+  const [stats, setStats] = useState<StatsPayload | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const res = await fetch("/api/voice-lab/system-stats");
+        if (!res.ok) return;
+        const data = (await res.json()) as StatsPayload;
+        if (!cancelled) setStats(data);
+      } catch {
+        // finetune-api not running — silently skip
+      }
+    }
+
+    void poll();
+    const id = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  if (!stats) return null;
+
+  const rows: { label: string; pct: number }[] = [
+    { label: "CPU", pct: stats.cpu },
+    { label: "RAM", pct: stats.ram },
+    ...(stats.gpu !== null ? [{ label: "GPU", pct: stats.gpu }] : []),
+  ];
+
+  return (
+    <div className="mt-4 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+      <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+        System
+      </p>
+      <div className="space-y-2">
+        {rows.map(({ label, pct }) => (
+          <div key={label} className="space-y-1">
+            <div className="flex justify-between text-[10px] text-gray-500 dark:text-gray-400">
+              <span>{label}</span>
+              <span>{Math.round(pct)}%</span>
+            </div>
+            <StatBar pct={pct} />
+          </div>
+        ))}
+      </div>
+      {stats.vramUsed !== null && stats.vramTotal !== null && (
+        <p className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">
+          VRAM {(stats.vramUsed / 1024).toFixed(1)} /{" "}
+          {(stats.vramTotal / 1024).toFixed(1)} GB
+        </p>
+      )}
+    </div>
   );
 }
