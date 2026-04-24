@@ -381,6 +381,20 @@ async def upload_audio(job_id: str, file: UploadFile):
     return {"filename": wav_name, "size": os.path.getsize(dest)}
 
 
+@app.get("/jobs/{job_id}/audio", dependencies=[Depends(verify_api_key)])
+async def list_audio_files(job_id: str):
+    audio_dir = os.path.join(job_dir(job_id), "audio")
+    if not os.path.exists(audio_dir):
+        raise HTTPException(status_code=404, detail="Job not found")
+    files = []
+    for fname in sorted(os.listdir(audio_dir)):
+        if fname.lower().endswith(".wav"):
+            fpath = os.path.join(audio_dir, fname)
+            if os.path.isfile(fpath):
+                files.append({"name": fname, "size": os.path.getsize(fpath)})
+    return {"files": files}
+
+
 @app.post("/jobs/{job_id}/run-step", dependencies=[Depends(verify_api_key)])
 async def run_step(job_id: str, req: RunStepRequest, background_tasks: BackgroundTasks):
     jd = job_dir(job_id)
