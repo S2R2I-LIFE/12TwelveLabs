@@ -48,3 +48,29 @@ export async function DELETE(
   });
   return Response.json(await resp.json(), { status: resp.status });
 }
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ jobId: string }> },
+) {
+  const session = await auth();
+  if (!session?.user.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { jobId } = await params;
+  if (!(await verifyOwnership(jobId, session.user.id))) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const body = await req.json() as { trainingEpochs?: number; batchSize?: number };
+  const resp = await fetch(`${env.FINETUNE_API_ROUTE}/jobs/${jobId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${env.BACKEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  return Response.json(await resp.json(), { status: resp.status });
+}
