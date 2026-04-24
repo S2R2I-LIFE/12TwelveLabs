@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 import aiofiles
+import psutil
 import requests
 import yaml
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, UploadFile
@@ -155,6 +156,11 @@ class CurateRequest(BaseModel):
 
 class DeployRequest(BaseModel):
     userId: str
+
+
+class UpdateJobRequest(BaseModel):
+    trainingEpochs: Optional[int] = None
+    batchSize: Optional[int] = None
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -316,19 +322,63 @@ async def create_job(req: CreateJobRequest):
     return {"jobId": job_id, "voiceModelId": voice_id, "workDir": jd}
 
 
+@app.patch("/jobs/{job_id}", dependencies=[Depends(verify_api_key)])
+async def update_job(job_id: str, req: UpdateJobRequest):
+    job = db_fetchone("SELECT id FROM TrainingJob WHERE id = ?", (job_id,))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    parts: list[str] = []
+    vals: list = []
+    if req.trainingEpochs is not None:
+        parts.append("trainingEpochs = ?")
+        vals.append(req.trainingEpochs)
+    if req.batchSize is not None:
+        parts.append("batchSize = ?")
+        vals.append(req.batchSize)
+    if parts:
+        vals.append(job_id)
+        db_execute(
+            f"UPDATE TrainingJob SET {', '.join(parts)}, updatedAt = datetime('now') WHERE id = ?",
+            tuple(vals),
+        )
+    return {"updated": True}
+
+
 @app.post("/jobs/{job_id}/upload", dependencies=[Depends(verify_api_key)])
 async def upload_audio(job_id: str, file: UploadFile):
     audio_dir = os.path.join(job_dir(job_id), "audio")
     if not os.path.exists(audio_dir):
         raise HTTPException(status_code=404, detail="Job not found")
 
-    dest = os.path.join(audio_dir, file.filename)
-    async with aiofiles.open(dest, "wb") as f:
-        content = await file.read()
+    original_name = file.filename or "upload"
+    stem = Path(original_name).stem
+    wav_name = f"{stem}.wav"
+
+    # Write the raw upload to a temp file so ffmpeg can detect the real format
+    tmp_path = os.path.join(audio_dir, f"_tmp_{original_name}")
+    content = await file.read()
+    async with aiofiles.open(tmp_path, "wb") as f:
         await f.write(content)
 
+    dest = os.path.join(audio_dir, wav_name)
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", tmp_path, "-ac", "1", "-ar", "22050",
+             "-sample_fmt", "s16", dest],
+            capture_output=True, text=True, timeout=300,
+        )
+        if result.returncode != 0:
+            os.remove(tmp_path)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not convert audio to WAV: {result.stderr[-500:]}",
+            )
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
     update_job_status(job_id, "uploading")
-    return {"filename": file.filename, "size": len(content)}
+    return {"filename": wav_name, "size": os.path.getsize(dest)}
 
 
 @app.post("/jobs/{job_id}/run-step", dependencies=[Depends(verify_api_key)])
@@ -361,6 +411,15 @@ async def run_step(job_id: str, req: RunStepRequest, background_tasks: Backgroun
         script_src = os.path.join(FINETUNE_SCRIPTS, "makeDataset/tools/srtsegmenter.py")
         script_dst = os.path.join(jd, "srtsegmenter.py")
         shutil.copy(script_src, script_dst)
+        # from_wav only accepts valid PCM WAV; from_file auto-detects format,
+        # so files uploaded before the ffmpeg-conversion fix still work.
+        with open(script_dst) as f:
+            seg_content = f.read()
+        seg_content = seg_content.replace(
+            "AudioSegment.from_wav(", "AudioSegment.from_file("
+        )
+        with open(script_dst, "w") as f:
+            f.write(seg_content)
         cmd = ["python", "srtsegmenter.py"]
         background_tasks.add_task(run_subprocess_step, job_id, cmd, jd, "segmenting", 3)
 
@@ -714,6 +773,39 @@ async def delete_job(job_id: str):
         shutil.rmtree(jd)
 
     return {"deleted": True}
+
+
+@app.get("/system/stats", dependencies=[Depends(verify_api_key)])
+async def system_stats():
+    loop = asyncio.get_event_loop()
+    cpu = await loop.run_in_executor(None, lambda: psutil.cpu_percent(interval=0.1))
+    ram = psutil.virtual_memory().percent
+
+    gpu_util = None
+    vram_used = None
+    vram_total = None
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            parts = result.stdout.strip().split(",")
+            if len(parts) >= 3:
+                gpu_util = int(parts[0].strip())
+                vram_used = int(parts[1].strip())
+                vram_total = int(parts[2].strip())
+    except Exception:
+        pass
+
+    return {
+        "cpu": round(cpu, 1),
+        "ram": round(ram, 1),
+        "gpu": gpu_util,
+        "vramUsed": vram_used,
+        "vramTotal": vram_total,
+    }
 
 
 @app.get("/voices", dependencies=[Depends(verify_api_key)])
