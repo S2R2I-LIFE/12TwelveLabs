@@ -91,6 +91,31 @@ services:
               count: 1
               capabilities: [gpu]
 
+  gptsovits-api:
+    build:
+      context: ./gptsovits-api
+      dockerfile: Dockerfile
+    ports:
+      - '8105:8000'
+    restart: unless-stopped
+    environment:
+      - API_KEY=${BACKEND_API_KEY}
+      - DB_PATH=/prisma-data/db.sqlite
+      - WORKSPACE=/workspace
+      - GPTSOVITS_PATH=/workspace/GPT-SoVITS
+      - is_half=true
+    volumes:
+      - finetune_workspace:/workspace
+      - ./GPT-SoVITS:/workspace/GPT-SoVITS
+      - ./elevenlabs-clone-frontend/prisma:/prisma-data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
   frontend:
     build:
       context: ./elevenlabs-clone-frontend
@@ -109,12 +134,14 @@ services:
       - SEED_VC_API_ROUTE=http://seedvc-api:8000
       - MAKE_AN_AUDIO_API_ROUTE=http://make-an-audio-api:8000
       - FINETUNE_API_ROUTE=http://finetune-api:8000
+      - GPTSOVITS_API_ROUTE=http://gptsovits-api:8000
       - JUPYTERLAB_URL=http://jupyterlab:8888
     depends_on:
       - styletts2-api
       - seedvc-api
       - make-an-audio-api
       - finetune-api
+      - gptsovits-api
 
   inngest:
     image: inngest/inngest
