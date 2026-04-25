@@ -100,6 +100,7 @@ model TrainingJob {
     jobWorkDir     String?
     trainingEpochs Int        @default(75)
     batchSize      Int        @default(2)
+    sovitsEpochs   Int        @default(8)
     language       String     @default("en-us")
     createdAt      DateTime   @default(now())
     updatedAt      DateTime   @updatedAt
