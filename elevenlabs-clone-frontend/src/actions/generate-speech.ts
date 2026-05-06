@@ -76,6 +76,39 @@ export async function generateSpeechToSpeech(
   };
 }
 
+export async function generateGptSoVitsSpeech(text: string, voice: string) {
+  const session = await auth();
+  if (!session?.user.id) {
+    throw new Error("User not authenticated");
+  }
+
+  const audioClipJob = await db.generatedAudioClip.create({
+    data: {
+      text: text,
+      voice: voice,
+      user: {
+        connect: {
+          id: session.user.id,
+        },
+      },
+      service: "gptsovits",
+    },
+  });
+
+  await inngest.send({
+    name: "generate.request",
+    data: {
+      audioClipId: audioClipJob.id,
+      userId: session.user.id,
+    },
+  });
+
+  return {
+    audioId: audioClipJob.id,
+    shouldShowThrottleAlert: await shouldShowThrottleAlert(session.user.id),
+  };
+}
+
 export async function generateSoundEffect(prompt: string) {
   const session = await auth();
   if (!session?.user.id) {
@@ -168,6 +201,9 @@ const revalidateBasedOnService = async (service: ServiceType) => {
       break;
     case "make-an-audio":
       revalidatePath("/app/sound-effects/history");
+      break;
+    case "gptsovits":
+      revalidatePath("/app/speech-synthesis/text-to-speech");
       break;
   }
 };

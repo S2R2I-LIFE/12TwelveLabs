@@ -48,7 +48,11 @@ export function SpeechSidebar({
           {activeTab === "settings" ? (
             <div className="mb-6">
               <h2 className="mb-2 text-sm dark:text-gray-300">Voice</h2>
-              <VoiceSelector service={service} />
+              {service === "styletts2" ? (
+                <VoiceSelector services={["styletts2", "gptsovits"]} />
+              ) : (
+                <VoiceSelector service={service} />
+              )}
             </div>
           ) : (
             <HistoryPanel
@@ -103,7 +107,11 @@ export function SpeechSidebar({
             {activeTab === "settings" ? (
               <div className="mb-6">
                 <h2 className="mb-2 text-sm dark:text-gray-300">Voice</h2>
-                <VoiceSelector service={service} />
+                {service === "styletts2" ? (
+                  <VoiceSelector services={["styletts2", "gptsovits"]} />
+                ) : (
+                  <VoiceSelector service={service} />
+                )}
               </div>
             ) : (
               <HistoryPanel

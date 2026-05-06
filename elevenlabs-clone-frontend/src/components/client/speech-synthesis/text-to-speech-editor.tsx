@@ -15,6 +15,7 @@ import { ServiceType } from "~/types/services";
 import { GenerateButton } from "../generate-button";
 import {
   generateTextToSpeech,
+  generateGptSoVitsSpeech,
   generationStatus,
 } from "~/actions/generate-speech";
 import { useVoiceStore } from "~/stores/voice-store";
@@ -34,6 +35,7 @@ export function TextToSpeechEditor({
   const [currentAudioId, setCurrentAudioId] = useState<string | null>(null);
 
   const getSelectedVoice = useVoiceStore((state) => state.getSelectedVoice);
+  const activeTTSVoice = useVoiceStore((state) => state.activeTTSVoice);
 
   const { playAudio } = useAudioStore();
 
@@ -44,7 +46,7 @@ export function TextToSpeechEditor({
       try {
         const status = await generationStatus(currentAudioId);
 
-        const selectedVoice = getSelectedVoice("styletts2");
+        const selectedVoice = activeTTSVoice ?? getSelectedVoice("styletts2");
         if (status.success && status.audioUrl && selectedVoice) {
           clearInterval(pollInterval);
           setLoading(false);
@@ -85,6 +87,7 @@ export function TextToSpeechEditor({
     currentAudioId,
     loading,
     getSelectedVoice,
+    activeTTSVoice,
     playAudio,
     textContent,
     service,
@@ -118,15 +121,19 @@ export function TextToSpeechEditor({
   };
 
   const handleGenerateSpeech = async () => {
-    const selectedVoice = getSelectedVoice("styletts2");
+    const selectedVoice = activeTTSVoice ?? getSelectedVoice("styletts2");
 
     if (textContent.trim().length === 0 || !selectedVoice) return;
 
     try {
       setLoading(true);
-      const { audioId, shouldShowThrottleAlert } = await generateTextToSpeech(
+      const generate =
+        selectedVoice.service === "gptsovits"
+          ? generateGptSoVitsSpeech
+          : generateTextToSpeech;
+      const { audioId, shouldShowThrottleAlert } = await generate(
         textContent,
-        selectedVoice?.id,
+        selectedVoice.id,
       );
 
       if (shouldShowThrottleAlert) {

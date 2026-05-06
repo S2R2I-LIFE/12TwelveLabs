@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TrainWizard } from "./train-wizard";
 import { GptSoVitsWizard } from "./gptsovits-wizard";
 
@@ -24,6 +24,10 @@ export function BackendSelector({
   const [selected, setSelected] = useState<"styletts2" | "gptsovits" | null>(
     styletts2Job ? "styletts2" : gptsovitsJob ? "gptsovits" : null,
   );
+
+  useEffect(() => {
+    if (!styletts2Job && !gptsovitsJob) setSelected(null);
+  }, [styletts2Job, gptsovitsJob]);
 
   if (!selected) {
     return (
@@ -51,9 +55,30 @@ export function BackendSelector({
     );
   }
 
+  const changeModelButton = (
+    <div className="px-4 pt-4">
+      <button
+        onClick={() => setSelected(null)}
+        className="text-sm text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+      >
+        ← Change model
+      </button>
+    </div>
+  );
+
   if (selected === "gptsovits") {
-    return <GptSoVitsWizard initialJob={gptsovitsJob} />;
+    return (
+      <div>
+        {changeModelButton}
+        <GptSoVitsWizard initialJob={gptsovitsJob} />
+      </div>
+    );
   }
 
-  return <TrainWizard initialJob={styletts2Job} />;
+  return (
+    <div>
+      {changeModelButton}
+      <TrainWizard initialJob={styletts2Job} />
+    </div>
+  );
 }

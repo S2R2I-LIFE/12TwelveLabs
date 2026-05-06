@@ -10,15 +10,26 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
-  const resp = await fetch(`${env.FINETUNE_API_ROUTE}/jobs`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.BACKEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ...body, userId: session.user.id }),
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(`${env.FINETUNE_API_ROUTE}/jobs`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.BACKEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ...body, userId: session.user.id }),
+    });
+  } catch (e) {
+    return Response.json({ error: `finetune-api unreachable: ${String(e)}` }, { status: 502 });
+  }
 
-  const data = await resp.json();
+  const text = await resp.text();
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { error: text || "finetune-api returned empty response" };
+  }
   return Response.json(data, { status: resp.status });
 }

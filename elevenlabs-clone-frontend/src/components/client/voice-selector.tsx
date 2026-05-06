@@ -170,7 +170,15 @@ function FileRow({
 
 // ── Voice selector ─────────────────────────────────────────────────────────────
 
-export function VoiceSelector({ service }: { service: ServiceType }) {
+export function VoiceSelector({
+  service,
+  services,
+}: {
+  service?: ServiceType;
+  services?: ServiceType[];
+}) {
+  const isMulti = !!services && services.length > 0;
+
   const [isOpen, setIsOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -181,9 +189,15 @@ export function VoiceSelector({ service }: { service: ServiceType }) {
   const getSelectedVoice = useVoiceStore((s) => s.getSelectedVoice);
   const selectVoice = useVoiceStore((s) => s.selectVoice);
   const removeVoice = useVoiceStore((s) => s.removeVoice);
+  const activeTTSVoice = useVoiceStore((s) => s.activeTTSVoice);
+  const setActiveTTSVoice = useVoiceStore((s) => s.setActiveTTSVoice);
 
-  const voices = getVoices(service);
-  const selectedVoice = getSelectedVoice(service);
+  const voices = isMulti
+    ? services!.flatMap((svc) => getVoices(svc))
+    : getVoices(service!);
+  const selectedVoice = isMulti
+    ? activeTTSVoice
+    : getSelectedVoice(service!);
   const filesVoice = voices.find((v) => v.id === filesVoiceId);
 
   useEffect(() => {
@@ -200,11 +214,11 @@ export function VoiceSelector({ service }: { service: ServiceType }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const handleDeleteVoice = async (voiceId: string) => {
+  const handleDeleteVoice = async (voiceId: string, voiceService: ServiceType) => {
     setDeleting(voiceId);
     try {
       await fetch(`/api/voice-lab/voices/${voiceId}`, { method: "DELETE" });
-      removeVoice(service, voiceId);
+      removeVoice(voiceService, voiceId);
       setConfirmDelete(null);
       setIsOpen(false);
     } catch (e) {
@@ -243,17 +257,20 @@ export function VoiceSelector({ service }: { service: ServiceType }) {
               const custom = isCustomVoice(voice.id);
               const confirming = confirmDelete === voice.id;
               const isDeleting = deleting === voice.id;
+              const isSelected = isMulti
+                ? voice.id === selectedVoice?.id && voice.service === selectedVoice?.service
+                : voice.id === selectedVoice?.id;
 
               if (confirming) {
                 return (
                   <div
-                    key={voice.id}
+                    key={`${voice.service}:${voice.id}`}
                     className="flex items-center justify-between gap-2 bg-red-50 px-3 py-2 dark:bg-red-900/20"
                   >
                     <span className="text-sm text-red-700 dark:text-red-400">Delete "{voice.name}"?</span>
                     <div className="flex gap-1">
                       <button
-                        onClick={() => handleDeleteVoice(voice.id)}
+                        onClick={() => handleDeleteVoice(voice.id, voice.service)}
                         disabled={isDeleting}
                         className="rounded bg-red-500 px-2 py-0.5 text-xs text-white hover:bg-red-600 disabled:opacity-50"
                       >
@@ -272,14 +289,17 @@ export function VoiceSelector({ service }: { service: ServiceType }) {
 
               return (
                 <div
-                  key={voice.id}
-                  className={`group flex items-center px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${voice.id === selectedVoice?.id ? "bg-gray-50 dark:bg-gray-700/50" : ""}`}
+                  key={`${voice.service}:${voice.id}`}
+                  className={`group flex items-center px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${isSelected ? "bg-gray-50 dark:bg-gray-700/50" : ""}`}
                 >
                   {/* Select area */}
                   <div
                     className="flex flex-1 cursor-pointer items-center"
                     onClick={() => {
-                      selectVoice(service, voice.id);
+                      if (isMulti) {
+                        setActiveTTSVoice(voice);
+                      }
+                      selectVoice(voice.service, voice.id);
                       setIsOpen(false);
                     }}
                   >
@@ -288,22 +308,29 @@ export function VoiceSelector({ service }: { service: ServiceType }) {
                       style={{ background: voice.gradientColors }}
                     />
                     <span className="text-sm dark:text-gray-300">{voice.name}</span>
+                    {isMulti && (
+                      <span className="ml-1.5 text-xs text-gray-400 dark:text-gray-500">
+                        {voice.service === "gptsovits" ? "GPT-SoVITS" : "StyleTTS2"}
+                      </span>
+                    )}
                   </div>
 
                   {/* Action buttons — only for custom voices */}
                   {custom && (
                     <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button
-                        title="Manage files"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsOpen(false);
-                          setFilesVoiceId(voice.id);
-                        }}
-                        className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
-                      >
-                        <IoFolderOpenOutline className="h-3.5 w-3.5" />
-                      </button>
+                      {voice.service === "styletts2" && (
+                        <button
+                          title="Manage files"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsOpen(false);
+                            setFilesVoiceId(voice.id);
+                          }}
+                          className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                        >
+                          <IoFolderOpenOutline className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       <button
                         title="Delete voice"
                         onClick={(e) => {

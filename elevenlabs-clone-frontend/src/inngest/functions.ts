@@ -68,6 +68,19 @@ export const aiGenerationFunction = inngest.createFunction(
             prompt: audioClip.text,
           }),
         });
+      } else if (audioClip.service === "gptsovits") {
+        response = await fetch(env.GPTSOVITS_API_ROUTE + "/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${env.BACKEND_API_KEY}`,
+          },
+          body: JSON.stringify({
+            text: audioClip.text,
+            voice_id: audioClip.voice,
+            language: "en",
+          }),
+        });
       }
 
       if (!response) {

@@ -12,6 +12,7 @@ import {
   IoStopCircleOutline,
   IoTrashOutline,
 } from "react-icons/io5";
+import Link from "next/link";
 import { getVoiceModels } from "~/actions/voice-lab";
 import { useVoiceStore } from "~/stores/voice-store";
 
@@ -98,6 +99,7 @@ export function GptSoVitsWizard({
   } | null;
 }) {
   const setVoices = useVoiceStore((s) => s.setVoices);
+  const setActiveTTSVoice = useVoiceStore((s) => s.setActiveTTSVoice);
 
   const [step, setStep] = useState(initialJob ? statusToStep(initialJob.status) : 1);
   const maxStepReached = useRef(initialJob ? statusToStep(initialJob.status) : 1);
@@ -137,7 +139,6 @@ export function GptSoVitsWizard({
   useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [logs]);
 
   useEffect(() => {
-    setLogs([]);
     setRunning(false);
     setStepDone(false);
     setStepError(null);
@@ -168,9 +169,13 @@ export function GptSoVitsWizard({
     setStep((s) => s - 1);
   }, [running]);
 
-  const startSSE = useCallback((jobId: string) => {
+  const startSSE = useCallback((jobId: string, stepLabel?: string) => {
     esRef.current?.close();
-    setLogs((prev) => [...prev, ...(prev.length > 0 ? [""] : [])]);
+    setLogs((prev) => [
+      ...prev,
+      ...(prev.length > 0 ? [""] : []),
+      ...(stepLabel ? [`── ${stepLabel} ─────────────────────────────`] : ["Starting…"]),
+    ]);
     setStepDone(false);
     setStepError(null);
     setRunning(true);
@@ -197,6 +202,13 @@ export function GptSoVitsWizard({
     es.onerror = () => { setRunning(false); es.close(); };
   }, []);
 
+  const STEP_NAME_MAP: Record<string, string> = {
+    transcribe: "Transcribe",
+    features: "Extract Features",
+    train: "Train",
+    deploy: "Deploy",
+  };
+
   const runStep = useCallback(async (stepName: string) => {
     if (!job) return;
     const resp = await fetch(`/api/voice-lab/gptsovits/jobs/${job.jobId}/run-step`, {
@@ -209,7 +221,7 @@ export function GptSoVitsWizard({
       setLogs((prev) => [...prev, `Error: ${err.detail ?? JSON.stringify(err)}`]);
       return;
     }
-    startSSE(job.jobId);
+    startSSE(job.jobId, STEP_NAME_MAP[stepName] ?? stepName);
   }, [job, startSSE]);
 
   // ── Step handlers ─────────────────────────────────────────────────────────────
@@ -290,7 +302,7 @@ export function GptSoVitsWizard({
         body: JSON.stringify({ step: "deploy" }),
       });
       if (resp.ok) {
-        startSSE(job.jobId);
+        startSSE(job.jobId, "Deploy");
       } else {
         const data = await resp.json() as { detail?: string };
         setDeployError(data.detail ?? "Deploy failed");
@@ -332,9 +344,15 @@ export function GptSoVitsWizard({
   useEffect(() => {
     if (step === 6 && stepDone && !deployed) {
       setDeployed(true);
-      getVoiceModels().then((v) => { if (v.length > 0) setVoices(v); }).catch(console.error);
+      getVoiceModels().then((v) => {
+        if (v.length > 0) {
+          setVoices(v);
+          const newVoice = v.find((m) => m.id === job?.voiceModelId);
+          if (newVoice) setActiveTTSVoice(newVoice);
+        }
+      }).catch(console.error);
     }
-  }, [step, stepDone, deployed, setVoices]);
+  }, [step, stepDone, deployed, setVoices, setActiveTTSVoice, job]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -499,6 +517,7 @@ export function GptSoVitsWizard({
             stepError={stepError ?? deployError}
             onDeploy={handleDeploy}
             onBack={goBack}
+            onRedeploy={() => setDeployed(false)}
           />
         )}
       </div>
@@ -778,7 +797,7 @@ function StepLog({
         )}
       </button>
 
-      {logs.length > 0 && <LogConsole logs={logs} logsEndRef={logsEndRef} />}
+      {(running || logs.length > 0) && <LogConsole logs={logs} logsEndRef={logsEndRef} />}
 
       {stepError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
@@ -801,11 +820,11 @@ function StepLog({
 }
 
 function StepDeploy({
-  deployed, deploying, running, stepDone, logs, logsEndRef, stepError, onDeploy, onBack,
+  deployed, deploying, running, stepDone, logs, logsEndRef, stepError, onDeploy, onBack, onRedeploy,
 }: {
   deployed: boolean; deploying: boolean; running: boolean; stepDone: boolean;
   logs: string[]; logsEndRef: React.RefObject<HTMLDivElement>;
-  stepError: string | null; onDeploy: () => void; onBack: () => void;
+  stepError: string | null; onDeploy: () => void; onBack: () => void; onRedeploy: () => void;
 }) {
   return (
     <div className="max-w-lg space-y-4">
@@ -817,8 +836,24 @@ function StepDeploy({
       </div>
 
       {deployed ? (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
-          Voice deployed successfully.
+        <div className="space-y-3">
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
+            Voice deployed successfully.
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/app/speech-synthesis/text-to-speech"
+              className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+            >
+              Use in Text to Speech <IoChevronForward />
+            </Link>
+            <button
+              onClick={onRedeploy}
+              className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+            >
+              Re-deploy
+            </button>
+          </div>
         </div>
       ) : (
         <button
@@ -832,7 +867,7 @@ function StepDeploy({
         </button>
       )}
 
-      {logs.length > 0 && <LogConsole logs={logs} logsEndRef={logsEndRef} />}
+      {(running || logs.length > 0) && <LogConsole logs={logs} logsEndRef={logsEndRef} />}
 
       {stepError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">

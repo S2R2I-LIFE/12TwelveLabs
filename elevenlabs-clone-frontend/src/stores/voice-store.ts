@@ -46,9 +46,11 @@ interface VoiceState {
   voices: Voice[];
   isInitialized: boolean;
   selectedVoices: Record<ServiceType, Voice | null>;
+  activeTTSVoice: Voice | null;
   getVoices: (service: ServiceType) => Voice[];
   getSelectedVoice: (service: ServiceType) => Voice | null;
   selectVoice: (service: ServiceType, voice: string) => void;
+  setActiveTTSVoice: (voice: Voice | null) => void;
   setVoices: (incoming: Voice[]) => void;
   removeVoice: (service: ServiceType, voiceId: string) => void;
 }
@@ -60,13 +62,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     styletts2: defaultStyleTTS2Voice,
     seedvc: defaultSeedVCVoice,
     "make-an-audio": null,
+    gptsovits: null,
   },
+  activeTTSVoice: null,
   getVoices: (service) => {
     return get().voices.filter((voice) => voice.service === service);
   },
   getSelectedVoice: (service) => {
     return get().selectedVoices[service];
   },
+  setActiveTTSVoice: (voice) => set({ activeTTSVoice: voice }),
   selectVoice: (service, voiceId) => {
     const serviceVoices = get().voices.filter(
       (voice) => voice.service === service,
@@ -96,7 +101,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
           merged.push(v);
         }
       }
-      return { voices: merged, isInitialized: true };
+      // Auto-set activeTTSVoice to first TTS-capable voice if not already set
+      const newActiveTTS =
+        state.activeTTSVoice ??
+        merged.find(
+          (v) => v.service === "styletts2" || v.service === "gptsovits",
+        ) ??
+        null;
+      return { voices: merged, isInitialized: true, activeTTSVoice: newActiveTTS };
     });
   },
   removeVoice: (service, voiceId) => {
@@ -105,8 +117,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         (v) => !(v.id === voiceId && v.service === service),
       );
       const current = state.selectedVoices[service];
+      const currentTTS = state.activeTTSVoice;
+      const newActiveTTS =
+        currentTTS?.id === voiceId && currentTTS?.service === service
+          ? (voices.find(
+              (v) => v.service === "styletts2" || v.service === "gptsovits",
+            ) ?? null)
+          : currentTTS;
       return {
         voices,
+        activeTTSVoice: newActiveTTS,
         selectedVoices: {
           ...state.selectedVoices,
           [service]:

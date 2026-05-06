@@ -98,12 +98,19 @@ services:
     ports:
       - '8105:8000'
     restart: unless-stopped
+    shm_size: '2gb'
     environment:
       - API_KEY=${BACKEND_API_KEY}
       - DB_PATH=/prisma-data/db.sqlite
       - WORKSPACE=/workspace
       - GPTSOVITS_PATH=/workspace/GPT-SoVITS
-      - is_half=true
+      - is_half=True
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=us-east-1
+      - S3_BUCKET=b-gpt-elevenlabs-clone
+      - S3_PREFIX=gptsovits-outputs
+      - TORCHAUDIO_USE_TORCHCODEC=0
     volumes:
       - finetune_workspace:/workspace
       - ./GPT-SoVITS:/workspace/GPT-SoVITS
