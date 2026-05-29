@@ -443,6 +443,18 @@ export function TrainWizard({
     }
   };
 
+  const handleCancel = useCallback(async () => {
+    if (!job) return;
+    esRef.current?.close();
+    try {
+      await fetch(`/api/voice-lab/jobs/${job.jobId}/cancel`, { method: "POST" });
+    } catch (e) {
+      console.error(e);
+    }
+    setRunning(false);
+    setStepError("Cancelled");
+  }, [job]);
+
   const handleNewVoice = async () => {
     setResetting(true);
     esRef.current?.close();
@@ -544,8 +556,8 @@ export function TrainWizard({
             disabled={resetting}
             className="mt-3 flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 md:mt-5"
           >
-            <IoAddOutline className="h-3.5 w-3.5" />
-            {resetting ? "Resetting…" : "New voice"}
+            <IoTrashOutline className="h-3.5 w-3.5" />
+            {resetting ? "Resetting…" : "Reset"}
           </button>
         )}
 
@@ -604,6 +616,7 @@ export function TrainWizard({
             onBack={goBack}
             logsEndRef={logsEndRef}
             wasCompleted={maxStepReached.current > 3}
+            onCancel={handleCancel}
           />
         )}
 
@@ -628,6 +641,7 @@ export function TrainWizard({
             onNext={() => goToStep(6)}
             onBack={goBack}
             logsEndRef={logsEndRef}
+            onCancel={handleCancel}
           />
         )}
 
@@ -642,6 +656,7 @@ export function TrainWizard({
             onNext={() => { setTrainingFinished(true); goToStep(7); }}
             onBack={goBack}
             logsEndRef={logsEndRef}
+            onCancel={handleCancel}
           />
         )}
 
@@ -1036,6 +1051,7 @@ function StepPreprocess({
   logsEndRef,
   onBack,
   wasCompleted,
+  onCancel,
 }: {
   jobId: string;
   logs: string[];
@@ -1047,6 +1063,7 @@ function StepPreprocess({
   logsEndRef: React.RefObject<HTMLDivElement>;
   onBack: () => void;
   wasCompleted?: boolean;
+  onCancel: () => void;
 }) {
   const [ranTranscribe, setRanTranscribe] = useState(wasCompleted ?? false);
   const [ranSegment, setRanSegment] = useState(wasCompleted ?? false);
@@ -1101,6 +1118,14 @@ function StepPreprocess({
         >
           ← Back
         </button>
+        {running && (
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+          >
+            <IoStopCircleOutline className="h-4 w-4" /> Cancel
+          </button>
+        )}
         <button
           onClick={onNext}
           disabled={!ranSegment}
@@ -1226,6 +1251,7 @@ function StepPhOnemize({
   onNext,
   logsEndRef,
   onBack,
+  onCancel,
 }: {
   logs: string[];
   running: boolean;
@@ -1235,6 +1261,7 @@ function StepPhOnemize({
   onNext: () => void;
   logsEndRef: React.RefObject<HTMLDivElement>;
   onBack: () => void;
+  onCancel: () => void;
 }) {
   return (
     <div className="max-w-lg space-y-4">
@@ -1275,6 +1302,14 @@ function StepPhOnemize({
         >
           ← Back
         </button>
+        {running && (
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+          >
+            <IoStopCircleOutline className="h-4 w-4" /> Cancel
+          </button>
+        )}
         <button
           onClick={onNext}
           disabled={!stepDone}
@@ -1297,6 +1332,7 @@ function StepTrain({
   onNext,
   logsEndRef,
   onBack,
+  onCancel,
 }: {
   logs: string[];
   running: boolean;
@@ -1307,6 +1343,7 @@ function StepTrain({
   onNext: () => void;
   logsEndRef: React.RefObject<HTMLDivElement>;
   onBack: () => void;
+  onCancel: () => void;
 }) {
   const pct = epochProgress
     ? Math.round((epochProgress.current / epochProgress.total) * 100)
@@ -1371,6 +1408,14 @@ function StepTrain({
         >
           ← Back
         </button>
+        {running && (
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+          >
+            <IoStopCircleOutline className="h-4 w-4" /> Cancel
+          </button>
+        )}
         <button
           onClick={onNext}
           disabled={!stepDone}

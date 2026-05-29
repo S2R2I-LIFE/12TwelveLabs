@@ -789,6 +789,18 @@ async def delete_job(job_id: str):
     return {"deleted": True}
 
 
+@app.post("/jobs/{job_id}/cancel", dependencies=[Depends(verify_api_key)])
+async def cancel_job(job_id: str):
+    if job_id in running_procs:
+        running_procs[job_id].terminate()
+        running_procs.pop(job_id, None)
+    db_execute(
+        "UPDATE TrainingJob SET status = 'failed', updatedAt = datetime('now') WHERE id = ?",
+        (job_id,),
+    )
+    return {"cancelled": True}
+
+
 @app.get("/system/stats", dependencies=[Depends(verify_api_key)])
 async def system_stats():
     loop = asyncio.get_event_loop()

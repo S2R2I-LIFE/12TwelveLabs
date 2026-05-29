@@ -211,6 +211,7 @@ def generate_sovits_config(job_id: str, sovits_epochs: int, jd: str) -> str:
     config["train"]["if_save_every_weights"] = True
     sovits_weights_dir = os.path.join(jd, "output", "sovits_weights")
     config["train"]["save_weight_dir"] = sovits_weights_dir
+    config["save_weight_dir"] = sovits_weights_dir
     config["data"]["exp_dir"] = features_dir
     config["s2_ckpt_dir"] = sovits_ckpt_dir
     config["name"] = job_id
@@ -857,6 +858,18 @@ async def delete_job(job_id: str):
         shutil.rmtree(jd)
 
     return {"deleted": True}
+
+
+@app.post("/jobs/{job_id}/cancel", dependencies=[Depends(verify_api_key)])
+async def cancel_job(job_id: str):
+    if job_id in running_procs:
+        running_procs[job_id].terminate()
+        running_procs.pop(job_id, None)
+    db_execute(
+        "UPDATE TrainingJob SET status = 'failed', updatedAt = datetime('now') WHERE id = ?",
+        (job_id,),
+    )
+    return {"cancelled": True}
 
 
 @app.post("/generate", dependencies=[Depends(verify_api_key)])

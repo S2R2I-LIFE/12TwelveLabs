@@ -314,6 +314,18 @@ export function GptSoVitsWizard({
     }
   };
 
+  const handleCancel = useCallback(async () => {
+    if (!job) return;
+    esRef.current?.close();
+    try {
+      await fetch(`/api/voice-lab/gptsovits/jobs/${job.jobId}/cancel`, { method: "POST" });
+    } catch (e) {
+      console.error(e);
+    }
+    setRunning(false);
+    setStepError("Cancelled");
+  }, [job]);
+
   const handleNewVoice = async () => {
     setResetting(true);
     esRef.current?.close();
@@ -416,8 +428,8 @@ export function GptSoVitsWizard({
             disabled={resetting}
             className="mt-3 flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 md:mt-5"
           >
-            <IoAddOutline className="h-3.5 w-3.5" />
-            {resetting ? "Resetting…" : "New voice"}
+            <IoTrashOutline className="h-3.5 w-3.5" />
+            {resetting ? "Resetting…" : "Reset"}
           </button>
         )}
       </div>
@@ -469,6 +481,7 @@ export function GptSoVitsWizard({
             onBack={goBack}
             logsEndRef={logsEndRef}
             wasCompleted={maxStepReached.current > 3}
+            onCancel={handleCancel}
           />
         )}
 
@@ -486,6 +499,7 @@ export function GptSoVitsWizard({
             onBack={goBack}
             logsEndRef={logsEndRef}
             wasCompleted={maxStepReached.current > 4}
+            onCancel={handleCancel}
           />
         )}
 
@@ -503,6 +517,7 @@ export function GptSoVitsWizard({
             onBack={goBack}
             logsEndRef={logsEndRef}
             wasCompleted={maxStepReached.current > 5}
+            onCancel={handleCancel}
           />
         )}
 
@@ -769,12 +784,13 @@ function LogConsole({ logs, logsEndRef }: { logs: string[]; logsEndRef: React.Re
 
 function StepLog({
   title, description, runLabel, logs, running, stepDone, stepError,
-  onRun, onNext, onBack, logsEndRef, wasCompleted,
+  onRun, onNext, onBack, logsEndRef, wasCompleted, onCancel,
 }: {
   title: string; description: string; runLabel: string;
   logs: string[]; running: boolean; stepDone: boolean; stepError: string | null;
   onRun: () => void; onNext: () => void; onBack: () => void;
   logsEndRef: React.RefObject<HTMLDivElement>; wasCompleted?: boolean;
+  onCancel: () => void;
 }) {
   return (
     <div className="max-w-2xl space-y-4">
@@ -810,6 +826,14 @@ function StepLog({
           className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
           ← Back
         </button>
+        {running && (
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+          >
+            <IoStopCircleOutline className="h-4 w-4" /> Cancel
+          </button>
+        )}
         <button onClick={onNext} disabled={!stepDone && !wasCompleted}
           className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
           Continue <IoChevronForward />
